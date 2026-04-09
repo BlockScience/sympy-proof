@@ -105,6 +105,16 @@ axioms = AxiomSet(
                 "and sum a_t < inf a.s. Measure-theoretic — not proved here."
             ),
         ),
+        Axiom(
+            name="initial_gap_nonneg",
+            expr=sympy.Symbol("V_0") >= 0,
+            description="Initial optimality gap V_0 = h(lambda*) - h(lambda_0) >= 0.",
+        ),
+        Axiom(
+            name="gradient_squared_nonneg",
+            expr=sympy.Symbol("g_sq") >= 0,
+            description="Squared gradient norm ||grad h||^2 >= 0.",
+        ),
     ),
 )
 

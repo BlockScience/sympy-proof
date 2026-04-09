@@ -80,12 +80,12 @@ axioms = AxiomSet(
     axioms=(
         Axiom(
             name="queue_nonneg",
-            expr=q_t >= 0,
+            expr=sympy.Symbol("q_t") >= 0,
             description="Queue lengths are nonnegative.",
         ),
         Axiom(
             name="xi_positive",
-            expr=xi > 0,
+            expr=sympy.Symbol("xi") > 0,
             description="Strictness parameter xi > 0 (strict feasibility).",
         ),
         Axiom(
@@ -109,7 +109,7 @@ axioms = AxiomSet(
         # Inherited from supermartingale foundation (08_supermartingale_finite)
         Axiom(
             name="process_nonneg",
-            expr=Y_0 >= 0,
+            expr=sympy.Symbol("Y_0") >= 0,
             inherited=True,
             citation=Citation(source="Solo & Kong 1995, Adaptive Signal Processing Algorithms, Thm E.7.4"),
             description="The process Y_t is nonnegative. Required by Solo-Kong.",

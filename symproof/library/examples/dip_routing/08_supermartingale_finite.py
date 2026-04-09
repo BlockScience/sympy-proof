@@ -53,7 +53,7 @@ axioms = AxiomSet(
     axioms=(
         Axiom(
             name="process_nonneg",
-            expr=Y_0 >= 0,
+            expr=sympy.Symbol("Y_0") >= 0,
             description="The process Y_t is nonnegative at all times.",
         ),
         Axiom(

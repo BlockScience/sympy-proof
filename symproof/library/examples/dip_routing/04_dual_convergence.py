@@ -117,6 +117,20 @@ axioms = AxiomSet(
                 "Required by Flam's convergence argument."
             ),
         ),
+        Axiom(
+            name="initial_gap_nonneg",
+            expr=sympy.Symbol("V_0") >= 0,
+            inherited=True,
+            citation=Citation(source="Flam 2004, Optimization under uncertainty using momentum"),
+            description="Initial optimality gap V_0 >= 0. Required by Flam's convergence.",
+        ),
+        Axiom(
+            name="gradient_squared_nonneg",
+            expr=sympy.Symbol("g_sq") >= 0,
+            inherited=True,
+            citation=Citation(source="Squared norm is nonnegative by definition"),
+            description="Squared gradient norm ||grad h||^2 >= 0. Required by Flam's convergence.",
+        ),
     ),
 )
 

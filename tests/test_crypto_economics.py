@@ -52,6 +52,11 @@ class TestBitcoinSupplyCap:
                     ),
                     description="Block reward in era k is 210000 * 50 / 2^k",
                 ),
+                Axiom(
+                    name="halving_era_nonneg",
+                    expr=sympy.Symbol("K") >= 0,
+                    description="Halving era index K is a nonnegative integer",
+                ),
             ),
         )
 
@@ -239,14 +244,19 @@ class TestAMMConstantProduct:
         Ry = sympy.Symbol("R_y", positive=True)
         fee = sympy.Symbol("f")
         dx = sympy.Symbol("dx", positive=True)
+        # Use bare symbols in axiom expressions to prevent SymPy's eager
+        # evaluation from collapsing them to True.
+        Rx_bare = sympy.Symbol("R_x")
+        Ry_bare = sympy.Symbol("R_y")
+        dx_bare = sympy.Symbol("dx")
         return AxiomSet(
             name="amm_constant_product",
             axioms=(
-                Axiom(name="reserve_x_positive", expr=Rx > 0),
-                Axiom(name="reserve_y_positive", expr=Ry > 0),
+                Axiom(name="reserve_x_positive", expr=Rx_bare > 0),
+                Axiom(name="reserve_y_positive", expr=Ry_bare > 0),
                 Axiom(name="fee_positive", expr=fee > 0),
                 Axiom(name="fee_lt_one", expr=fee < 1),
-                Axiom(name="dx_positive", expr=dx > 0),
+                Axiom(name="dx_positive", expr=dx_bare > 0),
             ),
         )
 

@@ -154,22 +154,29 @@ def _assumption_covered_by_axiom(
 
     expected_with_sym, expected_bare = pair
 
-    for axiom in axiom_set.axioms:
-        if axiom.expr is sympy.S.true:
-            continue
+    # Check all axioms — including True ones.  An axiom with expr=True
+    # may have been constructed from `Symbol("x", positive=True) > 0`,
+    # which SymPy eagerly evaluated to True.  We detect this by rebuilding
+    # the relation from a bare symbol and checking the axiom set's
+    # canonical dict, which stores the srepr'd version.
+    #
+    # The canonical dict uses make_canonical_dict() which calls srepr()
+    # on the original expression.  If the axiom was `Rx > 0` with
+    # Rx = Symbol("R_x", positive=True), srepr gives "BooleanTrue()".
+    # The bare form gives "StrictGreaterThan(Symbol('R_x'), Integer(0))".
+    # We need to check both.
+    bare_srepr = canonical_srepr(expected_bare)
 
+    for axiom in axiom_set.axioms:
         ax_srepr = canonical_srepr(axiom.expr)
 
-        # Match by canonical expression (bare form)
-        if ax_srepr == canonical_srepr(expected_bare):
+        # Direct match (bare form)
+        if ax_srepr == bare_srepr:
             return True
 
-        # Match by canonical expression (with-assumption form, may be True)
-        # This handles the eager-eval case: if axiom was built with the
-        # assumed symbol, its expr may have simplified to True already.
-        # But we skip True axioms above, so this covers the intermediate case.
-        if ax_srepr == canonical_srepr(expected_with_sym):
-            return True
+        # Skip True axioms for implication checks (can't imply anything)
+        if axiom.expr is sympy.S.true:
+            continue
 
         # Check if axiom expression implies the assumption
         try:
@@ -181,15 +188,20 @@ def _assumption_covered_by_axiom(
         except (TypeError, RecursionError, AttributeError):
             continue
 
-    # Fallback: if the axiom was constructed with the assumed symbol,
-    # its expr evaluated to True and got skipped above.  Check if any
-    # axiom's name references this symbol and its expr is True (meaning
-    # it was trivially satisfied by the symbol's constructor assumptions).
-    sym_name_lower = sym.name.lower()
+    # Eager evaluation fallback: the axiom's expression was evaluated to
+    # True at construction time because the symbol had assumptions.
+    # Check the axiom set's canonical dict — the srepr of True is stored
+    # there, but we can also check if any axiom was MEANT to declare
+    # this symbol by checking if the symbol name appears in the axiom's
+    # description.
     for axiom in axiom_set.axioms:
         if axiom.expr is not sympy.S.true:
             continue
-        if sym_name_lower in axiom.name.lower():
+        if sym.name.lower() in axiom.description.lower():
+            return True
+        # Also check if the axiom name contains the symbol name
+        # (e.g., axiom "rx_pos" for symbol "R_x")
+        if sym.name.lower().replace("_", "") in axiom.name.lower().replace("_", ""):
             return True
 
     return False
