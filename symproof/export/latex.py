@@ -223,6 +223,50 @@ def latex_lemma(
 # ---------------------------------------------------------------------------
 
 
+def _latex_imported_bundle(
+    bundle: ProofBundle,
+    depth: int = 0,
+) -> str:
+    """Render an imported bundle showing its internal proof structure.
+
+    Each imported bundle is a complete proof: hypothesis, its own
+    lemma chain, and possibly its own imports (recursively).
+    The ``depth`` parameter controls indentation for nested imports.
+    """
+    indent = "  " * depth
+    lines: list[str] = []
+    h = bundle.hypothesis
+    h_fb = h.description or h.name
+    h_tex = _expr_or_fallback(h.expr, h_fb)
+
+    lines.append(
+        rf"{indent}\item \textbf{{{_escape(h.name)}}}: "
+        rf"${h_tex}$ "
+        rf"\quad \texttt{{{_hash_short(bundle.bundle_hash)}}}"
+    )
+
+    # Show the lemma chain inside this imported bundle
+    if bundle.proof.lemmas:
+        lemma_names = ", ".join(
+            _escape(lem.name) for lem in bundle.proof.lemmas
+        )
+        lines.append(
+            rf"{indent}  \par \emph{{Proof chain:}} {lemma_names}"
+        )
+
+    # Recurse into sub-imports
+    if bundle.proof.imported_bundles:
+        lines.append(
+            rf"{indent}  \par \emph{{Built on:}}"
+        )
+        lines.append(rf"{indent}  \begin{{itemize}}")
+        for sub in bundle.proof.imported_bundles:
+            lines.append(_latex_imported_bundle(sub, depth=depth + 2))
+        lines.append(rf"{indent}  \end{{itemize}}")
+
+    return "\n".join(lines)
+
+
 def latex_proof(
     script: ProofScript,
     result: ProofResult | None = None,
@@ -230,24 +274,24 @@ def latex_proof(
     """Render a proof script as a LaTeX fragment.
 
     Returns a ``\\subsection*`` level fragment with the lemma chain.
-    Does not include axioms or hypothesis — use ``latex_bundle``
-    for the complete rendering.
+    Imported bundles are rendered recursively, showing their internal
+    proof structure — because each import is itself a complete proof.
+
+    Does not include the top-level axioms or hypothesis — use
+    ``latex_bundle`` for the complete rendering.
     """
     lines: list[str] = []
 
-    # Imported bundles
+    # Imported bundles (rendered recursively)
     if script.imported_bundles:
-        lines.append(r"\subsubsection*{Imported Bundles}")
+        lines.append(r"\subsubsection*{Imported Proofs}")
+        lines.append(
+            r"\emph{Each imported proof is a sealed bundle with its "
+            r"own hypothesis and lemma chain.}"
+        )
         lines.append(r"\begin{itemize}")
         for imp in script.imported_bundles:
-            h_fb = imp.hypothesis.description or imp.hypothesis.name
-            h_tex = _expr_or_fallback(imp.hypothesis.expr, h_fb)
-            h_hash = _hash_short(imp.bundle_hash)
-            name = _escape(imp.hypothesis.name)
-            lines.append(
-                rf"  \item \textbf{{{name}}}: ${h_tex}$"
-                rf" \quad \texttt{{{h_hash}}}"
-            )
+            lines.append(_latex_imported_bundle(imp, depth=1))
         lines.append(r"\end{itemize}")
         lines.append("")
 

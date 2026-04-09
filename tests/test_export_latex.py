@@ -222,7 +222,7 @@ class TestLatexProof:
     def test_imported_bundles_section(self):
         bundle = _imported_bundle()
         tex = latex_proof(bundle.proof, result=bundle.proof_result)
-        assert "Imported Bundles" in tex
+        assert "Imported Proofs" in tex
         assert "sub\\_claim" in tex
 
 
@@ -288,7 +288,7 @@ class TestLatexBundle:
     def test_imported_bundles_rendered(self):
         bundle = _imported_bundle()
         tex = latex_bundle(bundle)
-        assert "Imported Bundles" in tex
+        assert "Imported Proofs" in tex
 
     def test_hash_footer(self):
         bundle = _simple_bundle()

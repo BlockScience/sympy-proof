@@ -1,19 +1,28 @@
-"""LaTeX export for symproof proof bundles.
+"""Export views for symproof proof bundles.
 
-Renders the computational proof models as human-readable LaTeX.
-The computational models (``sympy.srepr``, SHA-256 hashes) remain
-canonical; the LaTeX is a *view*, not a source of truth.
+The computational models (``sympy.srepr``, SHA-256 hashes) are the
+source of truth.  These modules produce *views* — human-readable
+renderings for different audiences and tools.
 
-Public API::
+LaTeX::
 
-    from symproof.export import latex_bundle, latex_proof, latex_lemma
+    from symproof.export import latex_bundle, latex_document
+    tex = latex_bundle(bundle)
+    tex = latex_document(bundle)
 
-    tex = latex_bundle(bundle)          # full bundle as LaTeX fragment
-    tex = latex_document(bundle)        # standalone .tex file
-    tex = latex_proof(script, result)   # just the proof chain
-    tex = latex_lemma(lemma, result)    # single lemma
+Graph (DAG)::
+
+    from symproof.export import proof_dag, proof_dag_dot, proof_dag_mermaid
+    dag = proof_dag(bundle)            # plain dict: nodes + edges
+    dot = proof_dag_dot(bundle)        # graphviz DOT source
+    mmd = proof_dag_mermaid(bundle)    # mermaid source for GitHub/Notion
 """
 
+from symproof.export.graph import (
+    proof_dag,
+    proof_dag_dot,
+    proof_dag_mermaid,
+)
 from symproof.export.latex import (
     latex_bundle,
     latex_document,
@@ -26,4 +35,7 @@ __all__ = [
     "latex_document",
     "latex_lemma",
     "latex_proof",
+    "proof_dag",
+    "proof_dag_dot",
+    "proof_dag_mermaid",
 ]
