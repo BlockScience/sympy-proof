@@ -66,14 +66,35 @@ Discrete-time stability | NO            | —                   | UNPROVEN
 
 Gaps are more important than passes. Flag every UNPROVEN and NEEDS SIM entry.
 
-### Step 3: Audit each proof individually
-
-For each sealed bundle, re-verify and interrogate:
+**Visualize the dependency structure** across all proofs to reveal hidden coupling:
 
 ```python
+from symproof.export import proof_dag_mermaid
+
+# Compact view: bundle-level dependencies only
+print("```mermaid")
+print(proof_dag_mermaid(*all_bundles, expand_lemmas=False))
+print("```")
+```
+
+If two "independent" proofs both import the same sub-proof, they're coupled through shared assumptions — if that sub-proof's axioms are wrong, both fail. The DAG makes this visible.
+
+### Step 3: Audit each proof individually
+
+For each sealed bundle, re-verify and render:
+
+```python
+from symproof import verify_proof
+from symproof.export import latex_bundle
+
 result = verify_proof(bundle.proof, trust_imports=False)
 assert result.status.value == "VERIFIED"
+
+# Render the proof so you review the mathematics, not just metadata
+print(latex_bundle(bundle))
 ```
+
+The LaTeX view shows axioms, hypothesis, lemma chain with dependencies, and advisories in one readable document. Review the math directly — don't rely on metadata summaries.
 
 For each proof, check:
 
@@ -96,6 +117,21 @@ For each proof, check:
 - Symbolic vs numeric divergence (symbolic proof doesn't guarantee floating-point behavior)
 
 ### Step 4: Assess the collection
+
+Generate the expanded proof DAG to see the full structure with lemma-level detail:
+
+```python
+from symproof.export import proof_dag_dot, proof_dag_mermaid
+
+# Full view: bundles + lemmas + dependencies + advisory markers
+print("```mermaid")
+print(proof_dag_mermaid(*all_bundles, expand_lemmas=True))
+print("```")
+
+# For offline rendering with Graphviz (shows advisory ⚠ markers):
+# dot_source = proof_dag_dot(*all_bundles, expand_lemmas=True)
+# Save to file, render with: dot -Tpng proof_dag.dot > proof_dag.png
+```
 
 This is the critical step. Ask:
 

@@ -125,6 +125,26 @@ h_controllable = axioms.hypothesis(
 #   - Actuator saturation behavior (HIL test)
 ```
 
+**Visualize the planned structure** as a Mermaid diagram so the domain expert and the proof constructor see the same picture. For independent properties:
+
+```mermaid
+graph LR
+  REQ-STAB["REQ-STAB\nclosed_loop_stable"]
+  REQ-CTRL["REQ-CTRL\nsystem_controllable"]
+  REQ-OBS["REQ-OBS\nsystem_observable"]
+```
+
+For properties with logical dependencies (e.g., uniqueness depends on strict convexity):
+
+```mermaid
+graph LR
+  REQ-CONVEX["REQ-CONVEX\nstrictly_convex"]
+  REQ-UNIQUE["REQ-UNIQUE\nunique_minimizer"]
+  REQ-UNIQUE --> REQ-CONVEX
+```
+
+Show this diagram to the domain expert before handing off to the constructor. It makes the independence vs. dependency structure visible and prevents the constructor from accidentally coupling proofs that should be independent.
+
 ### Step 7: Save the framed problem
 
 Write a Python file containing:
