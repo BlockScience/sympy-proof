@@ -22,9 +22,12 @@ Example::
 """
 
 from symproof.library.control import (
+    closed_loop_stability,
     controllability_rank,
+    gain_margin,
     hurwitz_second_order,
     hurwitz_third_order,
+    lyapunov_from_system,
     lyapunov_stability,
     observability_rank,
     quadratic_invariant,
@@ -52,12 +55,15 @@ __all__ = [
     "amm_output_positive",
     "amm_product_nondecreasing",
     "chain_error_bound",
+    "closed_loop_stability",
     "controllability_rank",
     "div_down",
     "div_up",
     "fee_complement_positive",
+    "gain_margin",
     "hurwitz_second_order",
     "hurwitz_third_order",
+    "lyapunov_from_system",
     "lyapunov_stability",
     "max_ge_first",
     "mul_down",

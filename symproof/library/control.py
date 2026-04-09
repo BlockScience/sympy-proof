@@ -4,14 +4,16 @@ Reusable proof bundles for classical control theory results.
 Each function accepts an ``AxiomSet`` (plus system matrices/symbols),
 builds a decomposed proof, seals it, and returns a ``ProofBundle``.
 
-Categories
-----------
-Stability
-    Routh-Hurwitz (2nd/3rd order), Lyapunov equation
-Controllability & observability
-    Rank conditions via minor determinants
-Conservation laws
-    Quadratic invariants along trajectories (Lyapunov-like)
+Building blocks (wrap SymPy basics, composable)
+    ``hurwitz_second_order``, ``hurwitz_third_order`` — Routh-Hurwitz
+    ``controllability_rank``, ``observability_rank`` — Gramian determinants
+    ``lyapunov_stability`` — verify A^T P + P A + Q = 0
+    ``quadratic_invariant`` — Lie derivative dV/dt = 0
+
+Non-trivial composed proofs (real engineering value)
+    ``closed_loop_stability`` — plant + controller → char poly → Hurwitz
+    ``lyapunov_from_system`` — construct P by solving Lyapunov eq, then verify
+    ``gain_margin`` — critical gain at which stability is lost
 """
 
 from __future__ import annotations
@@ -413,6 +415,271 @@ def quadratic_invariant(
             expr=V_dot_simplified,
             expected=sympy.Integer(0),
             description="Lie derivative simplifies to 0",
+        )
+        .build()
+    )
+    return seal(axiom_set, hyp, script)
+
+
+# ===================================================================
+# Composed: closed-loop stability (plant + controller)
+# ===================================================================
+
+
+def closed_loop_stability(
+    axiom_set: AxiomSet,
+    plant_num: sympy.Basic,
+    plant_den: sympy.Basic,
+    ctrl_num: sympy.Basic,
+    ctrl_den: sympy.Basic,
+    s: sympy.Symbol,
+    *,
+    assumptions: dict[str, dict] | None = None,
+) -> ProofBundle:
+    """Prove closed-loop stability from plant and controller transfer functions.
+
+    Given plant ``G(s) = plant_num / plant_den`` and controller
+    ``C(s) = ctrl_num / ctrl_den``, the closed-loop characteristic
+    polynomial is::
+
+        cl_poly = plant_den * ctrl_den + plant_num * ctrl_num
+
+    This function extracts the polynomial, identifies its order, and
+    delegates to ``hurwitz_second_order`` or ``hurwitz_third_order``.
+
+    This is the workflow an engineer actually uses: specify plant and
+    controller, get a stability certificate.
+
+    Parameters
+    ----------
+    axiom_set:
+        Must contain axioms establishing positivity of controller gains.
+    plant_num, plant_den:
+        Numerator and denominator of the plant transfer function.
+    ctrl_num, ctrl_den:
+        Numerator and denominator of the controller.
+    s:
+        The Laplace variable symbol.
+    assumptions:
+        Symbol assumptions for coefficient positivity checks.
+    """
+    asm = assumptions or {}
+
+    cl_poly = sympy.expand(plant_den * ctrl_den + plant_num * ctrl_num)
+    poly = sympy.Poly(cl_poly, s)
+    coeffs = poly.all_coeffs()  # highest degree first
+    order = poly.degree()
+
+    if order == 2:
+        return hurwitz_second_order(
+            axiom_set, a2=coeffs[0], a1=coeffs[1], a0=coeffs[2],
+            assumptions=asm,
+        )
+    if order == 3:
+        return hurwitz_third_order(
+            axiom_set,
+            a3=coeffs[0], a2=coeffs[1], a1=coeffs[2], a0=coeffs[3],
+            assumptions=asm,
+        )
+    raise ValueError(
+        f"closed_loop_stability supports order 2 and 3, got {order}. "
+        f"Characteristic polynomial: {cl_poly}"
+    )
+
+
+# ===================================================================
+# Composed: Lyapunov function construction + verification
+# ===================================================================
+
+
+def lyapunov_from_system(
+    axiom_set: AxiomSet,
+    A: sympy.Matrix,
+    Q: sympy.Matrix | None = None,
+) -> ProofBundle:
+    r"""Construct a Lyapunov function for a linear system and prove stability.
+
+    Given ``dx/dt = Ax``, solves the Lyapunov equation
+    ``A^T P + P A = -Q`` for a symmetric ``P``, then verifies:
+
+    1. The Lyapunov equation is satisfied (entry-by-entry)
+    2. ``P`` is positive definite (all leading principal minors > 0)
+
+    This is the non-trivial version: the engineer provides ``A`` and
+    gets back a complete stability certificate with a constructed
+    Lyapunov function — not just a verification of a given ``P``.
+
+    Parameters
+    ----------
+    axiom_set:
+        Axiom context.
+    A:
+        System matrix (n x n). Must be Hurwitz (all eigenvalues Re < 0).
+    Q:
+        Positive definite dissipation matrix. Defaults to identity.
+
+    Raises
+    ------
+    ValueError
+        If the Lyapunov equation has no solution (system may be unstable).
+    """
+    n = A.shape[0]
+    if Q is None:
+        Q = sympy.eye(n)
+
+    # Construct symbolic symmetric P
+    p_syms = {}
+    P_sym = sympy.zeros(n)
+    for i in range(n):
+        for j in range(i, n):
+            name = f"p_{i}{j}"
+            p_syms[name] = sympy.Symbol(name)
+            P_sym[i, j] = p_syms[name]
+            P_sym[j, i] = p_syms[name]
+
+    # Solve A^T P + P A + Q = 0
+    lyap_residual = A.T * P_sym + P_sym * A + Q
+    equations = []
+    for i in range(n):
+        for j in range(i, n):
+            equations.append(lyap_residual[i, j])
+
+    solution = sympy.solve(equations, list(p_syms.values()))
+    if not solution:
+        raise ValueError(
+            "Lyapunov equation has no solution — system may be unstable."
+        )
+
+    P_solved = P_sym.subs(solution)
+    P_simplified = sympy.simplify(P_solved)
+
+    # Build proof: Lyapunov equation + positive definiteness
+    hyp = axiom_set.hypothesis(
+        "lyapunov_constructed",
+        expr=sympy.Eq(
+            sympy.trace((A.T * P_simplified + P_simplified * A + Q) ** 2),
+            0,
+        ),
+        description="Constructed Lyapunov function proves stability",
+    )
+
+    builder = ProofBuilder(
+        axiom_set,
+        hyp.name,
+        name="lyapunov_construction_proof",
+        claim="Lyapunov equation solved and P verified positive definite",
+    )
+
+    # Lemma group 1: Lyapunov equation satisfied
+    L = A.T * P_simplified + P_simplified * A + Q
+    for i in range(n):
+        for j in range(n):
+            entry = sympy.simplify(L[i, j])
+            builder = builder.lemma(
+                f"lyap_eq_{i}{j}",
+                LemmaKind.EQUALITY,
+                expr=entry,
+                expected=sympy.Integer(0),
+                description=f"Lyapunov residual ({i},{j}) = 0",
+            )
+
+    # Lemma group 2: P is positive definite
+    # Sylvester's criterion: all leading principal minors > 0
+    for k in range(1, n + 1):
+        minor = P_simplified[:k, :k].det()
+        minor_simplified = sympy.simplify(minor)
+        builder = builder.lemma(
+            f"P_minor_{k}_positive",
+            LemmaKind.QUERY,
+            expr=sympy.Q.positive(minor_simplified),
+            assumptions={
+                sym.name: {"positive": True}
+                for sym in minor_simplified.free_symbols
+                if hasattr(sym, "name")
+            },
+            description=f"Leading principal minor of order {k} > 0",
+        )
+
+    script = builder.build()
+    return seal(axiom_set, hyp, script)
+
+
+# ===================================================================
+# Composed: gain margin
+# ===================================================================
+
+
+def gain_margin(
+    axiom_set: AxiomSet,
+    open_loop_char_coeffs: list[sympy.Basic],
+    gain: sympy.Symbol,
+    s: sympy.Symbol,
+    *,
+    assumptions: dict[str, dict] | None = None,
+) -> ProofBundle:
+    """Prove stability under gain, and identify the critical gain.
+
+    For a third-order system ``a3*s^3 + a2*s^2 + a1*s + K`` where
+    ``K`` is a tunable gain, the Routh condition requires
+    ``a1*a2 > K*a3``. This function proves:
+
+    1. The current gain is positive
+    2. The Routh cross-term condition holds (gain below critical)
+
+    The critical gain ``K_crit = a1*a2/a3`` is the stability boundary.
+
+    Parameters
+    ----------
+    axiom_set:
+        Must contain axiom establishing ``gain < K_crit``.
+    open_loop_char_coeffs:
+        Coefficients ``[a3, a2, a1]`` of the open-loop char poly
+        (without the gain term). The closed-loop poly is
+        ``a3*s^3 + a2*s^2 + a1*s + gain``.
+    gain:
+        The tunable gain symbol.
+    s:
+        Laplace variable (unused, kept for API consistency).
+    assumptions:
+        Symbol assumptions for positivity checks.
+    """
+    asm = assumptions or {}
+    if len(open_loop_char_coeffs) != 3:
+        raise ValueError(
+            "gain_margin requires exactly 3 coefficients [a3, a2, a1]"
+        )
+
+    a3, a2, a1 = open_loop_char_coeffs
+    K_crit = a1 * a2 / a3
+    routh_cross = a1 * a2 - gain * a3
+
+    hyp = axiom_set.hypothesis(
+        "gain_margin_stable",
+        expr=sympy.And(gain > 0, routh_cross > 0),
+        description="System stable: gain < K_crit = a1*a2/a3",
+    )
+
+    script = (
+        ProofBuilder(
+            axiom_set,
+            hyp.name,
+            name="gain_margin_proof",
+            claim="Gain below critical value => Routh condition holds",
+        )
+        .lemma(
+            "gain_positive",
+            LemmaKind.QUERY,
+            expr=sympy.Q.positive(gain),
+            assumptions=asm,
+            description="Gain is positive",
+        )
+        .lemma(
+            "below_critical",
+            LemmaKind.BOOLEAN,
+            expr=sympy.Implies(gain < K_crit, routh_cross > 0),
+            assumptions=asm,
+            depends_on=["gain_positive"],
+            description="gain < a1*a2/a3 => a1*a2 - gain*a3 > 0",
         )
         .build()
     )

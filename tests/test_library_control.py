@@ -17,9 +17,12 @@ from symproof import (
     verify_proof,
 )
 from symproof.library.control import (
+    closed_loop_stability,
     controllability_rank,
+    gain_margin,
     hurwitz_second_order,
     hurwitz_third_order,
+    lyapunov_from_system,
     lyapunov_stability,
     observability_rank,
     quadratic_invariant,
@@ -411,3 +414,137 @@ class TestCrossDomainComposition:
         )
         bundle = seal(axioms, h, script)
         assert len(bundle.proof.imported_bundles) == 2
+
+
+# ===================================================================
+# Composed: closed-loop stability
+# ===================================================================
+
+
+class TestClosedLoopStability:
+    """Plant + controller → stability certificate."""
+
+    def test_pd_on_double_integrator(self):
+        """PD controller on 1/s^2 plant → stable closed loop."""
+        s = sympy.Symbol("s")
+        Kp = sympy.Symbol("Kp", positive=True)
+        Kd = sympy.Symbol("Kd", positive=True)
+
+        axioms = AxiomSet(
+            name="pd_control",
+            axioms=(
+                Axiom(name="Kp_pos", expr=Kp > 0),
+                Axiom(name="Kd_pos", expr=Kd > 0),
+            ),
+        )
+        # Plant: G = 1/s^2, Controller: C = Kp + Kd*s
+        bundle = closed_loop_stability(
+            axioms,
+            plant_num=sympy.Integer(1),
+            plant_den=s**2,
+            ctrl_num=Kp + Kd * s,
+            ctrl_den=sympy.Integer(1),
+            s=s,
+            assumptions={"Kp": {"positive": True}, "Kd": {"positive": True}},
+        )
+        assert bundle.bundle_hash
+
+    def test_p_on_first_order(self):
+        """P controller on 1/(s+1) → stable."""
+        s = sympy.Symbol("s")
+        Kp = sympy.Symbol("Kp", positive=True)
+
+        axioms = AxiomSet(
+            name="p_control",
+            axioms=(Axiom(name="Kp_pos", expr=Kp > 0),),
+        )
+        # Plant: 1/(s+1), Controller: Kp
+        # CL poly: (s+1) + Kp = s + 1 + Kp (first order — too low!)
+        # Use Plant: 1/(s^2 + s), Controller: Kp
+        # CL: s^2 + s + Kp
+        bundle = closed_loop_stability(
+            axioms,
+            plant_num=sympy.Integer(1),
+            plant_den=s**2 + s,
+            ctrl_num=Kp,
+            ctrl_den=sympy.Integer(1),
+            s=s,
+            assumptions={"Kp": {"positive": True}},
+        )
+        assert bundle.bundle_hash
+
+
+# ===================================================================
+# Composed: Lyapunov construction
+# ===================================================================
+
+
+class TestLyapunovFromSystem:
+    """Auto-construct Lyapunov function and verify stability."""
+
+    def test_scalar_stable(self):
+        """Scalar system dx/dt = -a*x, a > 0."""
+        a = sympy.Symbol("a", positive=True)
+        A = sympy.Matrix([[-a]])
+
+        axioms = AxiomSet(
+            name="scalar",
+            axioms=(Axiom(name="a_pos", expr=a > 0),),
+        )
+        bundle = lyapunov_from_system(axioms, A)
+        assert bundle.bundle_hash
+
+    def test_damped_oscillator(self):
+        """2x2 damped oscillator: A = [[0,1],[-k,-c]]."""
+        k = sympy.Symbol("k", positive=True)
+        c = sympy.Symbol("c", positive=True)
+        A = sympy.Matrix([[0, 1], [-k, -c]])
+
+        axioms = AxiomSet(
+            name="oscillator",
+            axioms=(
+                Axiom(name="k_pos", expr=k > 0),
+                Axiom(name="c_pos", expr=c > 0),
+            ),
+        )
+        bundle = lyapunov_from_system(axioms, A)
+        assert bundle.bundle_hash
+        # Should have 4 Lyapunov eq lemmas + 2 positive definiteness lemmas
+        assert len(bundle.proof.lemmas) == 6
+
+
+# ===================================================================
+# Composed: gain margin
+# ===================================================================
+
+
+class TestGainMargin:
+    """Gain margin proof for third-order systems."""
+
+    def test_concrete_gain_margin(self):
+        """s^3 + 2s^2 + 3s + K with K=5 < K_crit = 3*2/1 = 6."""
+        s = sympy.Symbol("s")
+        K = sympy.Symbol("K", positive=True)
+
+        axioms = AxiomSet(
+            name="gain_system",
+            axioms=(
+                Axiom(name="K_pos", expr=K > 0),
+                Axiom(
+                    name="K_below_crit",
+                    expr=K < sympy.Integer(6),
+                ),
+            ),
+        )
+        bundle = gain_margin(
+            axioms,
+            open_loop_char_coeffs=[
+                sympy.Integer(1),
+                sympy.Integer(2),
+                sympy.Integer(3),
+            ],
+            gain=K,
+            s=s,
+            assumptions={"K": {"positive": True}},
+        )
+        assert bundle.bundle_hash
