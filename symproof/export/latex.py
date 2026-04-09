@@ -30,20 +30,25 @@ if TYPE_CHECKING:
 
 
 def _escape(text: str) -> str:
-    """Escape LaTeX special characters in plain text."""
-    for char, repl in [
-        ("\\", r"\textbackslash{}"),
-        ("&", r"\&"),
-        ("%", r"\%"),
-        ("$", r"\$"),
-        ("#", r"\#"),
-        ("_", r"\_"),
-        ("{", r"\{"),
-        ("}", r"\}"),
-        ("~", r"\textasciitilde{}"),
-        ("^", r"\textasciicircum{}"),
-    ]:
-        text = text.replace(char, repl)
+    """Escape LaTeX special characters in plain text.
+
+    Uses ``\\texorpdfstring`` workarounds where the standard escape
+    produces ugly output (e.g., ``^`` → ``\\^{}`` for a clean caret).
+    """
+    # Order matters: backslash first, then characters that could
+    # appear in the replacement strings.
+    text = text.replace("\\", r"\textbackslash{}")
+    text = text.replace("&", r"\&")
+    text = text.replace("%", r"\%")
+    text = text.replace("$", r"\$")
+    text = text.replace("#", r"\#")
+    text = text.replace("_", r"\_")
+    text = text.replace("{", r"\{")
+    text = text.replace("}", r"\}")
+    text = text.replace("~", r"\~{}")
+    text = text.replace("^", r"\^{}")
+    text = text.replace("<", r"\textless{}")
+    text = text.replace(">", r"\textgreater{}")
     return text
 
 
@@ -52,9 +57,50 @@ def _hash_short(h: str) -> str:
     return f"{h[:16]}\\ldots"
 
 
+def _strip_assumptions(expr: sympy.Basic) -> sympy.Basic:
+    """Replace assumption-bearing symbols with bare symbols.
+
+    SymPy eagerly evaluates expressions like ``x > 0`` to ``True``
+    when ``x`` has ``positive=True``.  For display purposes we want
+    the unevaluated form, so we substitute bare symbols first.
+    """
+    subs = {}
+    for sym in expr.free_symbols:
+        if sym.assumptions0:  # has non-default assumptions
+            bare = sympy.Symbol(sym.name)
+            if bare != sym:
+                subs[sym] = bare
+    return expr.subs(subs) if subs else expr
+
+
 def _expr_tex(expr: sympy.Basic) -> str:
-    """Render a SymPy expression to LaTeX math."""
-    return sympy.latex(expr)
+    """Render a SymPy expression to LaTeX math.
+
+    Strips symbol assumptions before rendering so that expressions
+    like ``x > 0`` display as ``x > 0`` instead of ``\\text{True}``.
+    """
+    stripped = _strip_assumptions(expr)
+    return sympy.latex(stripped)
+
+
+def _expr_or_fallback(expr: sympy.Basic, fallback: str) -> str:
+    """Render expression, falling back to text if it evaluated to True/False.
+
+    SymPy eagerly evaluates concrete expressions: ``Eq(I**2, -1)``
+    becomes ``True``, ``x > 0`` with ``positive=True`` becomes ``True``.
+    When this happens the mathematical content is lost, so we show the
+    fallback (typically the axiom name or description) instead.
+    """
+    if expr is sympy.true:
+        return rf"\text{{{_escape(fallback)}}}" if fallback else r"\top"
+    if expr is sympy.false:
+        return rf"\text{{{_escape(fallback)}}}" if fallback else r"\bot"
+    stripped = _strip_assumptions(expr)
+    if stripped is sympy.true:
+        return rf"\text{{{_escape(fallback)}}}" if fallback else r"\top"
+    if stripped is sympy.false:
+        return rf"\text{{{_escape(fallback)}}}" if fallback else r"\bot"
+    return sympy.latex(stripped)
 
 
 _ASSUMPTION_LABELS: dict[str, str] = {
@@ -194,7 +240,8 @@ def latex_proof(
         lines.append(r"\subsubsection*{Imported Bundles}")
         lines.append(r"\begin{itemize}")
         for imp in script.imported_bundles:
-            h_tex = _expr_tex(imp.hypothesis.expr)
+            h_fb = imp.hypothesis.description or imp.hypothesis.name
+            h_tex = _expr_or_fallback(imp.hypothesis.expr, h_fb)
             h_hash = _hash_short(imp.bundle_hash)
             name = _escape(imp.hypothesis.name)
             lines.append(
@@ -256,9 +303,10 @@ def latex_bundle(bundle: ProofBundle) -> str:
     lines.append(r"\begin{enumerate}")
     for axiom in ax.axioms:
         name = _escape(axiom.name)
-        expr_tex = _expr_tex(axiom.expr)
+        fallback = axiom.description or axiom.name
+        expr_tex = _expr_or_fallback(axiom.expr, fallback)
         lines.append(rf"  \item \textbf{{{name}}}: ${expr_tex}$")
-        if axiom.description:
+        if axiom.description and axiom.expr is not sympy.true:
             lines.append(rf"    \par {_escape(axiom.description)}")
     lines.append(r"\end{enumerate}")
     lines.append("")
@@ -266,8 +314,9 @@ def latex_bundle(bundle: ProofBundle) -> str:
     # Hypothesis
     lines.append(r"\subsection*{Hypothesis}")
     h = bundle.hypothesis
-    lines.append(rf"$\displaystyle {_expr_tex(h.expr)}$")
-    if h.description:
+    fallback = h.description or h.name
+    lines.append(rf"$\displaystyle {_expr_or_fallback(h.expr, fallback)}$")
+    if h.description and h.expr is not sympy.true:
         lines.append(rf"\par {_escape(h.description)}")
     lines.append("")
 
