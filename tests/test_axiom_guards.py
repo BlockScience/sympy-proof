@@ -167,6 +167,76 @@ class TestCitationRequirement:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Load-bearing assumption accounting
+# ---------------------------------------------------------------------------
+
+
+class TestLoadBearing:
+    def test_equality_with_uncovered_assumption_rejected(self):
+        """EQUALITY lemma using symbol with assumptions but no axiom → error."""
+        x = sympy.Symbol("x", positive=True)
+        ax = AxiomSet(name="s", axioms=(Axiom(name="d", expr=sympy.S.true),))
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_x", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        with pytest.raises(ValueError, match="load-bearing"):
+            seal(ax, h, script)
+
+    def test_covered_assumption_passes(self):
+        """Symbol with assumption that HAS a matching axiom → passes."""
+        x = sympy.Symbol("x", positive=True)
+        ax = AxiomSet(
+            name="s",
+            axioms=(Axiom(name="x_pos", expr=x > 0),),
+        )
+        h = ax.hypothesis("h", expr=x > 0)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_x", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_bare_symbol_no_issue(self):
+        """Symbol without assumptions → no load-bearing issue."""
+        x = sympy.Symbol("x")
+        ax = AxiomSet(name="s", axioms=(Axiom(name="d", expr=sympy.S.true),))
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_x", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_query_with_lemma_assumptions_not_flagged(self):
+        """QUERY lemma provides its own assumptions dict → symbol assumption is redundant."""
+        x = sympy.Symbol("x", positive=True)
+        ax = AxiomSet(
+            name="s",
+            axioms=(Axiom(name="x_pos", expr=x > 0),),
+        )
+        h = ax.hypothesis("h", expr=x > 0)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma(
+                "q",
+                LemmaKind.QUERY,
+                expr=sympy.Q.positive(x),
+                assumptions={"x": {"positive": True}},
+            )
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+
 class TestNoisyAssumptions:
     def test_seal_reports_assumptions(self):
         """seal() result includes [ASSUMPTIONS] advisories."""

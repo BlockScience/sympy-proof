@@ -113,6 +113,184 @@ def _check_foundations(
             )
 
 
+def _collect_script_symbols(script: ProofScript) -> set[sympy.Symbol]:
+    """Collect all free symbols from all lemma expressions in a script."""
+    symbols: set[sympy.Symbol] = set()
+    for lemma in script.lemmas:
+        symbols |= lemma.expr.free_symbols
+        if lemma.expected is not None:
+            symbols |= lemma.expected.free_symbols
+    return symbols
+
+
+def _assumption_covered_by_axiom(
+    sym: sympy.Symbol,
+    assumption: str,
+    axiom_set: AxiomSet,
+) -> bool:
+    """Check if a symbol assumption is covered by an axiom expression.
+
+    For example, ``positive=True`` on symbol ``x`` is covered by an
+    axiom with ``expr = x > 0``.
+
+    Handles SymPy's eager evaluation: if the axiom was constructed
+    with the same Symbol (which has assumptions), the expression may
+    have already been simplified to True.  In that case, we check
+    whether the symbol's name appears in the axiom name as a fallback.
+    """
+    # Build expected expressions using BOTH the actual symbol (for eager-eval
+    # matching) and a bare symbol (for structural matching)
+    bare = sympy.Symbol(sym.name)
+    expected_map = {
+        "positive": (sym > 0, bare > 0),
+        "nonnegative": (sym >= 0, bare >= 0),
+        "negative": (sym < 0, bare < 0),
+        "nonpositive": (sym <= 0, bare <= 0),
+        "nonzero": (sympy.Ne(sym, 0), sympy.Ne(bare, 0)),
+    }
+    pair = expected_map.get(assumption)
+    if pair is None:
+        return True  # integer, real, etc. — not expressible as axiom, skip
+
+    expected_with_sym, expected_bare = pair
+
+    for axiom in axiom_set.axioms:
+        if axiom.expr is sympy.S.true:
+            continue
+
+        ax_srepr = canonical_srepr(axiom.expr)
+
+        # Match by canonical expression (bare form)
+        if ax_srepr == canonical_srepr(expected_bare):
+            return True
+
+        # Match by canonical expression (with-assumption form, may be True)
+        # This handles the eager-eval case: if axiom was built with the
+        # assumed symbol, its expr may have simplified to True already.
+        # But we skip True axioms above, so this covers the intermediate case.
+        if ax_srepr == canonical_srepr(expected_with_sym):
+            return True
+
+        # Check if axiom expression implies the assumption
+        try:
+            implied = sympy.simplify(
+                sympy.Implies(axiom.expr, expected_bare)
+            )
+            if implied is sympy.S.true:
+                return True
+        except (TypeError, RecursionError, AttributeError):
+            continue
+
+    # Fallback: if the axiom was constructed with the assumed symbol,
+    # its expr evaluated to True and got skipped above.  Check if any
+    # axiom's name references this symbol and its expr is True (meaning
+    # it was trivially satisfied by the symbol's constructor assumptions).
+    sym_name_lower = sym.name.lower()
+    for axiom in axiom_set.axioms:
+        if axiom.expr is not sympy.S.true:
+            continue
+        if sym_name_lower in axiom.name.lower():
+            return True
+
+    return False
+
+
+def _audit_load_bearing(
+    axiom_set: AxiomSet,
+    script: ProofScript,
+) -> list[str]:
+    """Identify symbol assumptions that are load-bearing but not axiomatised.
+
+    For each symbol with user-specified constructor assumptions that
+    appears in the proof, checks whether an axiom covers the assumption.
+    If not covered, uses two detection strategies:
+
+    1. **Re-verification test** (for QUERY/BOOLEAN lemmas): strips the
+       assumption from the symbol, re-verifies each affected lemma.
+       If any lemma fails, the assumption is confirmed load-bearing.
+
+    2. **Presence test** (for EQUALITY lemmas): SymPy's eager evaluation
+       means EQUALITY expressions may have already been simplified using
+       the assumption at construction time.  Stripping won't undo this.
+       For EQUALITY lemmas, presence of the symbol with uncovered
+       assumptions is sufficient to flag it — the assumption *may* have
+       influenced the expression in ways that can't be detected post-hoc.
+
+    Returns a list of error messages for load-bearing unaxiomatised
+    assumptions.  Empty list means all assumptions are accounted for.
+    """
+    from symproof.models import Lemma, LemmaKind
+    from symproof.verification import verify_lemma
+
+    symbols = _collect_script_symbols(script)
+    errors: list[str] = []
+
+    for sym in symbols:
+        user_assumptions = getattr(sym, "_assumptions_orig", {})
+        if not user_assumptions:
+            continue
+
+        for assumption, value in user_assumptions.items():
+            if not value:
+                continue
+            if _assumption_covered_by_axiom(sym, assumption, axiom_set):
+                continue
+
+            # Not covered — check if load-bearing
+            bare = sympy.Symbol(sym.name)
+            affected_lemmas: list[str] = []
+
+            for lemma in script.lemmas:
+                if sym not in lemma.expr.free_symbols and (
+                    lemma.expected is None
+                    or sym not in lemma.expected.free_symbols
+                ):
+                    continue
+
+                # EQUALITY lemmas: flag by presence (eager eval may have
+                # baked in the assumption at construction time)
+                if lemma.kind == LemmaKind.EQUALITY:
+                    affected_lemmas.append(lemma.name)
+                    continue
+
+                # QUERY/BOOLEAN: strip and re-verify
+                stripped_expr = lemma.expr.xreplace({sym: bare})
+                stripped_expected = (
+                    lemma.expected.xreplace({sym: bare})
+                    if lemma.expected is not None
+                    else None
+                )
+                stripped_lemma = Lemma(
+                    name=lemma.name,
+                    kind=lemma.kind,
+                    expr=stripped_expr,
+                    expected=stripped_expected,
+                    assumptions=lemma.assumptions,
+                    transform=lemma.transform,
+                    inverse_transform=lemma.inverse_transform,
+                    depends_on=lemma.depends_on,
+                    description=lemma.description,
+                )
+
+                try:
+                    result = verify_lemma(stripped_lemma)
+                    if not result.passed:
+                        affected_lemmas.append(lemma.name)
+                except Exception:
+                    affected_lemmas.append(lemma.name)
+
+            if affected_lemmas:
+                errors.append(
+                    f"Symbol '{sym.name}' has assumption "
+                    f"'{assumption}={value}' which is load-bearing "
+                    f"(affects lemmas {affected_lemmas}) but "
+                    f"is not declared as an axiom. Add an axiom for "
+                    f"'{sym.name}' to the axiom set."
+                )
+
+    return errors
+
+
 def _check_axiom_consistency(axiom_set: AxiomSet) -> None:
     """Check that no pair of axioms contradicts each other.
 
@@ -255,6 +433,17 @@ def seal(
     # Pairwise consistency: reject contradictory axiom pairs.
     if check_consistency:
         _check_axiom_consistency(axiom_set)
+
+    # Load-bearing assumption accounting: symbol constructor assumptions
+    # that aren't declared as axioms but affect proof validity.
+    load_bearing_errors = _audit_load_bearing(axiom_set, script)
+    if load_bearing_errors:
+        raise ValueError(
+            "Load-bearing symbol assumptions found without matching axioms. "
+            "These are hidden axioms — the proof depends on them but they "
+            "are not declared in the axiom set:\n"
+            + "\n".join(f"  - {e}" for e in load_bearing_errors)
+        )
 
     # Always re-verify — no trust_imports shortcut when sealing.
     result = verify_proof(script, trust_imports=False)
