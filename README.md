@@ -8,9 +8,9 @@ Declare axioms, bind hypotheses, build lemma chains, and seal reproducible hashe
 
 The most expensive failures in engineering happen when you **correctly implement the wrong thing**.
 
-- Terra/Luna: code correctly implemented a flawed peg mechanism. $40B lost.
-- Beanstalk: governance math was correct Solidity. The economic model was exploitable.
-- Mango Markets: oracle math was implemented exactly as specified. The specification was wrong.
+- Therac-25: software faithfully executed the control algorithm. The algorithm's concurrency model was flawed. Patients died.
+- Mars Climate Orbiter: code correctly computed trajectory. The specification mixed imperial and metric units. $327M lost.
+- Terra/Luna: code correctly implemented the peg mechanism. The economic model was unstable. $40B lost.
 
 Mature fields (aerospace, medical devices, nuclear) solved this decades ago with an explicit split:
 
@@ -19,17 +19,17 @@ Mature fields (aerospace, medical devices, nuclear) solved this decades ago with
 | **Verification** | Did we build the thing right? (code matches spec) | Implementation bugs |
 | **Validation** | Did we build the right thing? (spec has the properties we need) | Correct code, wrong behavior |
 
-Current smart contract tools (Certora, Halmos, Slither) are **verification** tools — they prove the code matches a specification. But if the specification is flawed, correct code still gets exploited.
+Most formal methods tools are **verification** tools — they prove code matches a specification. But if the specification is flawed, correct code still fails.
 
-**symproof is primarily a validation tool.** It works at the formula level, not the bytecode level. The question "does this AMM formula actually preserve the invariant under adversarial fee configurations?" is a math question. The question "does rounding error net in the protocol's favor across a 5-step pipeline?" is a math question. These are questions about whether the *design* is correct — before any code is written.
+**symproof is primarily a validation tool.** It works at the formula level, not the code level. "Does this control law actually stabilize the plant?" is a math question. "Does rounding error accumulate in the right direction across a pipeline?" is a math question. "Does this invariant hold under the claimed parameter range?" is a math question. These are questions about whether the *design* is correct — before any code is written.
 
 ### The three-layer architecture
 
 | Layer | Role | Proves | Tool |
 |---|---|---|---|
 | **Validation** (symproof) | Is the math right? | Formulas have the behavioral properties designers expect | SymPy + deterministic hashing |
-| **Simulation** | Does it work in practice? | Properties hold under finite precision, noise, adversarial inputs | numpy, MATLAB, Monte Carlo, fuzzing |
-| **Verification** | Is the code right? | Production code matches the validated model | Certora, Halmos, Slither, manual audit |
+| **Simulation** | Does it work in practice? | Properties hold under finite precision, noise, parameter variation | numpy, MATLAB, Monte Carlo, fuzzing |
+| **Verification** | Is the code right? | Production code matches the validated model | Static analysis, formal verification, code review |
 
 symproof covers the first layer. It proves that the *formula* has the properties you think it has — not that the *code* implements the formula correctly, and not that the formula behaves well under conditions you haven't modeled.
 
@@ -39,26 +39,28 @@ The [satellite ADCS example](symproof/library/examples/control/04_composition.py
 
 ### What symproof proves (validation)
 
-- The AMM formula actually preserves the product invariant with fees
-- Rounding error is bounded AND nets in the protocol's favor
-- Intermediate products don't overflow machine word sizes
-- Cross-decimal token pricing requires normalization (and by how much)
 - A Lyapunov function exists (the linear model is actually stable)
+- The characteristic polynomial is Hurwitz (all roots in the left half-plane)
+- Rounding error is bounded AND accumulates in the correct direction
+- Intermediate products don't overflow machine word sizes
 - Coordinate transforms are invertible and preserve properties
+- Signed quantities (costs, errors, forces) net in the required direction
+- An economic invariant holds under the claimed fee structure
 
 ### What symproof does NOT prove
 
-- Production code matches the proven formula → **verification** (Certora, Halmos)
-- The formula behaves under adversarial parameter ranges → **simulation** (fuzzing, Monte Carlo)
-- State transitions are atomic (no reentrancy) → **static analysis** (Slither)
-- Token transfers deliver the expected amount → **integration tests**
-- Governance parameters stay within proven bounds → **access control audit**
+- Production code matches the proven formula → **verification** (formal verification, code review)
+- The formula behaves under parameter uncertainty → **simulation** (Monte Carlo, fuzzing)
+- The system is robust to unmodeled dynamics → **testing** (hardware-in-the-loop, integration tests)
+- Runtime inputs stay within the proven bounds → **monitoring** (runtime checks, assertions)
 
 These gaps are covered by the other two layers. symproof's proofs are **necessary but not sufficient** — they establish that the design is mathematically sound before simulation tests it under stress and code analysis verifies the implementation.
 
 ### Why this matters
 
-An economist designs an AMM. An auditor verifies the Solidity. But nobody proves the economist's math actually has the properties the protocol claims. This is the gap where the largest DeFi exploits live — and it's the gap symproof fills.
+An engineer designs a controller. A programmer implements it. But nobody proves the engineer's math actually has the stability properties the design review claims. A protocol economist writes a market mechanism. An auditor verifies the code. But nobody proves the economist's formulas actually preserve the invariants under adversarial conditions.
+
+This is the gap where the most expensive failures live — and it's the gap symproof fills.
 
 The goal: an open-source verification and validation stack where symbolic proofs, simulation results, and code audit findings are all independently reproducible, cryptographically linked, and traceable to requirements.
 
