@@ -21,4 +21,13 @@ Examples
 05_queue_stability
     Proposition 3 + Corollary 1: All queues empty infinitely often
     with probability one.
+06_danskin_concrete
+    Danskin's envelope theorem for the DIP quadratic objective.
+    Narrows the axiom from file 03.
+07_flam_convergence
+    Flam [19] Theorem 2: Lyapunov descent structure for stochastic
+    heavy ball convergence.  Narrows the axiom from file 04.
+08_supermartingale_finite
+    Solo-Kong [21] Theorem E.7.4: Arithmetic contradiction proof
+    for finite-time return to zero.  Narrows the axiom from file 05.
 """

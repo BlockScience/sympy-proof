@@ -24,6 +24,9 @@ stochastic optimisation theory.
 | `03_lagrangian_structure.py` | Proposition 1 (eq. 18–19) | Dual differentiability, reverse waterfilling maximisers |
 | `04_dual_convergence.py` | Proposition 2 (eq. 31) | Dual variables converge to optimum a.s. under decaying step |
 | `05_queue_stability.py` | Proposition 3 + Corollary 1 (eq. 33–34) | All queues empty infinitely often with probability one |
+| `06_danskin_concrete.py` | Danskin's theorem (concrete) | Envelope identity for the DIP quadratic objective |
+| `07_flam_convergence.py` | Flam [19], Theorem 2 (algebraic kernel) | Lyapunov descent structure + telescoping for stochastic heavy ball |
+| `08_supermartingale_finite.py` | Solo-Kong [21], Thm E.7.4 (finite-time core) | Arithmetic contradiction: bounded descent forces return to zero |
 
 ## Run
 
@@ -56,6 +59,22 @@ They do **not** cover:
 - Numerical simulation of the algorithm on specific network topologies
 - Comparison with BP, SBP, or ABP (empirical, not analytical)
 - Extension to time-varying arrival rates or non-stationary networks
+
+## Foundation proofs (06–08)
+
+Files 01–05 axiomatise three external theorems.  Files 06–08 push each
+axiom as far into computational territory as SymPy allows, leaving only
+the irreducibly measure-theoretic conclusions as axioms:
+
+| Axiom (from) | Foundation file | What is now proved | Remaining axiom |
+|---|---|---|---|
+| `danskin_theorem` (03) | `06_danskin_concrete.py` | FOC, strict concavity, IFT, envelope identity | Maximiser existence on compact domain |
+| `flam_theorem` (04) | `07_flam_convergence.py` | Descent structure, telescope, gradient must vanish | Robbins-Siegmund (stochastic supermartingale) |
+| `supermartingale_convergence` (05) | `08_supermartingale_finite.py` | Finite-time return via arithmetic contradiction | Borel-Cantelli extension to "infinitely often" |
+
+Additionally, `symproof/library/envelope.py` provides a reusable
+`envelope_theorem()` function (Danskin's theorem for any strongly concave
+objective), used by file 06.
 
 ## Approach
 

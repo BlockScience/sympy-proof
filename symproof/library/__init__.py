@@ -43,6 +43,7 @@ from symproof.library.convex import (
     unique_minimizer,
 )
 from symproof.library.core import max_ge_first, piecewise_collapse
+from symproof.library.envelope import envelope_theorem
 from symproof.library.defi import (
     DecimalAwarePool,
     RoundingFavor,
@@ -78,6 +79,7 @@ __all__ = [
     "convex_scalar",
     "convex_sum",
     "directional_chain_error",
+    "envelope_theorem",
     "div_down",
     "div_up",
     "fee_complement_positive",

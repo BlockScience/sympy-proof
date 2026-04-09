@@ -25,4 +25,7 @@ print("  uv run python -m symproof.library.examples.dip_routing.02_bounded_gradi
 print("  uv run python -m symproof.library.examples.dip_routing.03_lagrangian_structure")
 print("  uv run python -m symproof.library.examples.dip_routing.04_dual_convergence")
 print("  uv run python -m symproof.library.examples.dip_routing.05_queue_stability")
+print("  uv run python -m symproof.library.examples.dip_routing.06_danskin_concrete")
+print("  uv run python -m symproof.library.examples.dip_routing.07_flam_convergence")
+print("  uv run python -m symproof.library.examples.dip_routing.08_supermartingale_finite")
 print()
