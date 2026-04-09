@@ -6,6 +6,23 @@ user-invocable: false
 
 # symproof internals
 
+## Core philosophy: loosely coupled proofs, not monoliths
+
+symproof is designed for **collective coverage** — many small, focused proofs that each address one property of a system. This is more powerful and more scalable than complex proofs that try to establish everything at once.
+
+A single system should have MANY independent proofs:
+- Stability proof (does the system converge?)
+- Controllability proof (can we steer it?)
+- Observability proof (can we measure it?)
+- Invariant proof (is this quantity conserved?)
+- Convexity proof (is the optimization well-posed?)
+
+Each proof is sealed independently with its own hash. The hashes go into a **requirements traceability matrix** — each proof hash maps to a specific requirement. A reviewer can verify any proof independently without understanding the others.
+
+Composition via `import_bundle` is for when one property LOGICALLY DEPENDS on another (e.g., uniqueness depends on strict convexity). It is NOT for bundling unrelated properties together. If stability and controllability are independent properties, prove them separately.
+
+**symproof covers the symbolic analysis layer only.** It does not replace simulation (Monte Carlo, HIL) or code verification (static analysis, formal methods). A complete V&V program needs all three layers, with symproof's proof hashes linking the symbolic layer to the requirements alongside simulation results and audit findings.
+
 ## Evidence chain
 
 ```
@@ -34,23 +51,19 @@ AxiomSet → axiom_set_hash
 
 ## Advisory system
 
-Results carry `advisories: tuple[str, ...]` when verification passes through:
-- Domain-ignoring simplification (division, log, sqrt in EQUALITY)
-- `.doit()` fallback (Sum/Product evaluated, not directly simplified)
-- `refine()` or negation-check fallback (BOOLEAN)
-- Q-system heuristics (every passing QUERY)
-- INDETERMINATE (SymPy can't determine truth — not an error, needs different strategy)
+Results carry `advisories: tuple[str, ...]` when verification passes through known SymPy limitations. Every advisory is a flag for human review — it doesn't mean the proof is wrong, it means an engineer should inspect this step.
 
-## Composition
+## Composition (import_bundle)
+
+Use `import_bundle` ONLY when there is a logical dependency between proofs. The imported bundle's proof is re-verified at seal time.
 
 ```python
-ProofBuilder(axioms, hyp.name, name="...", claim="...")
-    .import_bundle(prior_bundle)    # re-verified at seal time
-    .lemma("step", LemmaKind.QUERY, expr=..., assumptions={...})
-    .build()
-```
+# YES: uniqueness depends on strong convexity
+unique = unique_minimizer(axioms, f, vars, m)  # internally imports strongly_convex
 
-`verify_proof(script, trust_imports=True)` skips import re-verification for exploration. `seal()` always re-verifies.
+# NO: don't bundle unrelated properties
+# Instead: prove stability and controllability SEPARATELY, trace both to requirements
+```
 
 ## Library catalog
 
@@ -69,36 +82,21 @@ ProofBuilder(axioms, hyp.name, name="...", claim="...")
 - `quadratic_invariant(ax, states, dots, V)` — dV/dt = 0
 
 ### convex — optimization problem certification
-- `convex_scalar(ax, f, x)` — f''(x) >= 0
-- `convex_hessian(ax, f, vars)` — Hessian PSD via Sylvester
-- `strongly_convex(ax, f, vars, m)` — H - mI PSD
-- `conjugate_function(ax, f, x, y)` — compute f*, verify convex
-- `convex_sum(ax, funcs, weights, vars)` — weighted sum
-- `convex_composition(ax, f, g, t, x)` — DCP rule
-- `unique_minimizer(ax, f, vars, m)` — strictly convex → unique
-- `gp_to_convex(ax, monomials, y, x)` — GP log-transform
+- `convex_scalar / convex_hessian / strongly_convex` — convexity proofs
+- `conjugate_function` — compute and verify Fenchel conjugate
+- `convex_sum / convex_composition` — DCP composition rules
+- `unique_minimizer` — strictly convex → unique (imports strongly_convex)
+- `gp_to_convex` — geometric program log-transform
 
 ### defi — DeFi mechanism analysis
-- `fee_complement_positive(ax, fee)` — 1-f > 0 from 0<f<1
-- `amm_output_positive(ax, Rx, Ry, fee, dx)` — swap output > 0
-- `amm_product_nondecreasing(ax, Rx, Ry, fee, dx)` — product grows
-- `mul_down / mul_up / div_down / div_up` — directed rounding ops
-- `rounding_bias_lemma / rounding_gap_lemma` — ceil >= floor, gap <= 1
-- `chain_error_bound` — cumulative rounding < N
+- `fee_complement_positive` — 1-f > 0 from bounded interval
+- `amm_output_positive / amm_product_nondecreasing` — AMM properties
+- `mul_down / mul_up / div_down / div_up` — directed rounding
+- `rounding_bias_lemma / rounding_gap_lemma / chain_error_bound` — error analysis
 - `phantom_overflow_check / no_phantom_overflow_check` — uint256 safety
 
 ## Known SymPy limitations
 
-1. **Bounded intervals**: Q-system can't reason about `0 < f < 1 → 1-f > 0`. Workaround: introduce helper symbol `g = 1-f`, prove `g > 0` separately.
-2. **Domain-ignoring simplify**: `simplify((x²-1)/(x-1))` cancels to `x+1` ignoring singularity at x=1. Advisory system flags this.
-3. **Piecewise under assumptions**: `simplify` doesn't collapse branches. Workaround: use assumption substitution (library `piecewise_collapse`).
-4. **Max/Min properties**: `Max(a,b) >= a` not verifiable directly. Workaround: library `max_ge_first`.
-
-## Key constraints
-
-- All SymPy serialization uses `sympy.srepr()`, never `str()`
-- Absolute imports only
-- All models are frozen Pydantic BaseModels
-- `seal()` is the only path to ProofBundle
-- `disprove()` is the only path to Disproof
-- Axioms are authoritative — lemma assumptions must not contradict them
+1. **Bounded intervals**: Q-system can't reason about `0 < f < 1 → 1-f > 0`. Workaround: helper symbol `g = 1-f`.
+2. **Domain-ignoring simplify**: cancels across singularities. Advisory system flags this.
+3. **Piecewise/Max/Min**: not simplified under assumptions. Library workarounds available.

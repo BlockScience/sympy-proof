@@ -1,15 +1,32 @@
 ---
 name: frame-proof
-description: Frame a proof problem — define axioms and hypothesis without constructing the proof. Use when a domain expert wants to state what needs to be proven.
+description: Frame proof problems — define axioms and hypotheses for a system. Produces the problem statements, not the proofs. Use when a domain expert wants to state what needs to be proven.
 ---
 
-# Frame a proof problem
+# Frame proof problems
 
-You are helping a **domain expert** who knows WHAT they want to prove but isn't going to construct the proof themselves. Your job is to translate their domain knowledge into a well-formed symproof problem: an `AxiomSet` and one or more `Hypothesis` objects.
+You are helping a **domain expert** who knows WHAT they want to prove but isn't going to construct the proofs themselves. Your job is to translate their domain knowledge into well-formed symproof problems.
 
-**You produce the problem statement. You do NOT produce the proof.**
+**You produce problem statements. You do NOT produce proofs.**
 
-The output of this workflow is a Python file that a prover can pick up and work with.
+## Key principle: one hypothesis per property, not one proof for everything
+
+A real system needs many properties verified. Frame them as SEPARATE hypotheses:
+
+```
+System: satellite attitude controller
+├── REQ-STAB: closed-loop stability (Routh-Hurwitz)     → hypothesis_stability
+├── REQ-CTRL: controllability (rank condition)           → hypothesis_controllable
+├── REQ-OBS:  observability (rank condition)             → hypothesis_observable
+├── REQ-LYAP: Lyapunov stability (P exists and is PD)   → hypothesis_lyapunov
+└── REQ-PERF: pointing error < 0.1 deg (steady-state)   → hypothesis_pointing
+```
+
+Each hypothesis gets its own proof and its own sealed hash. The hashes go into a requirements traceability matrix. A reviewer can verify any single proof without understanding the others.
+
+**Do NOT combine unrelated properties into one hypothesis.** `And(stable, controllable, observable)` is a monolith that's harder to prove, harder to review, and harder to maintain. If stability breaks after a parameter change, you shouldn't have to re-prove controllability.
+
+Use `import_bundle` ONLY when there is a genuine logical dependency (e.g., uniqueness of optimum depends on strict convexity).
 
 ## Argument
 
@@ -17,144 +34,111 @@ The user's proof request: $ARGUMENTS
 
 ## Workflow
 
-### Step 1: Understand the domain
+### Step 1: Understand the system
 
 Ask the user:
-- **What system or problem are you working with?** (e.g., control system, optimization problem, AMM mechanism, physical model)
-- **What are the key parameters/symbols?** Get names, types (real, positive, integer), and physical meaning
-- **What do you already know is true?** These become axioms — the accepted truths you don't need to prove
+- **What system are you working with?** (plant, mechanism, model, algorithm)
+- **What are you trying to establish?** Not one thing — enumerate the properties they need
+- **What requirements document or standard are they tracing to?** (DO-178C, ERC-4626, ISO 26262, internal spec)
 
-Don't assume. Domain experts know their systems; your job is to capture that knowledge precisely in SymPy.
+### Step 2: Enumerate the properties
 
-### Step 2: Define symbols
+For each property the system needs, create a separate entry:
+- Requirement ID (or name)
+- Plain English statement
+- Which symbols are involved
+- Whether it depends on another property (→ import_bundle) or is independent
 
-Declare SymPy symbols with appropriate assumptions:
+Most properties should be independent. The traceability comes from the hash mapping, not from proof composition.
+
+### Step 3: Define symbols
+
+Declare SymPy symbols with appropriate assumptions. These are shared across all hypotheses for this system.
+
 ```python
 import sympy
+
 Kp = sympy.Symbol("Kp", positive=True)   # proportional gain [N·m/rad]
+Kd = sympy.Symbol("Kd", positive=True)   # derivative gain [N·m·s/rad]
+J = sympy.Symbol("J", positive=True)      # moment of inertia [kg·m²]
 ```
 
-Always include:
-- Physical units in comments
-- SymPy assumptions that match the domain constraints (positive, real, integer, nonnegative)
-- Descriptive names matching the domain convention
+Always include physical units in comments and SymPy assumptions matching domain constraints.
 
-### Step 3: Build the axiom set
+### Step 4: Build the axiom set
 
-Axioms are what the user ACCEPTS AS TRUE. Ask explicitly:
-- "Is this always positive?"
-- "Is this bounded? By what?"
-- "What constraints come from physics / the problem definition?"
+Axioms are shared — they define the system context that all hypotheses operate within.
 
 ```python
 from symproof import Axiom, AxiomSet
 
 axioms = AxiomSet(
-    name="descriptive_name",
+    name="satellite_adcs",
     axioms=(
-        Axiom(name="gain_positive", expr=Kp > 0),
-        # ...
+        Axiom(name="inertia_positive", expr=J > 0),
+        Axiom(name="proportional_gain_positive", expr=Kp > 0),
+        Axiom(name="derivative_gain_positive", expr=Kd > 0),
     ),
 )
 ```
 
 Rules:
-- Each axiom gets a descriptive name
 - Don't include things that need to be PROVEN as axioms
-- If a constraint requires two separate conditions (e.g., `0 < f < 1`), use two axioms (`f > 0` and `f < 1`), not `And(f > 0, f < 1)` — separate axioms compose better
+- Separate compound constraints: `f > 0` and `f < 1`, not `And(f > 0, f < 1)`
+- Each axiom gets a descriptive name
 
-### Step 4: State the hypothesis
-
-Ask: "What exactly do you want to prove?" Then formalize it:
+### Step 5: State each hypothesis independently
 
 ```python
-hypothesis = axioms.hypothesis(
-    "descriptive_claim_name",
-    expr=<sympy boolean expression>,
-    description="Plain English description of the claim",
+h_stability = axioms.hypothesis(
+    "closed_loop_stable",
+    expr=...,
+    description="All characteristic polynomial roots have negative real part",
 )
+
+h_controllable = axioms.hypothesis(
+    "system_controllable",
+    expr=...,
+    description="Controllability matrix has full rank",
+)
+
+# These are INDEPENDENT — they share axioms but get separate proofs
 ```
 
-The hypothesis MUST be bound to the axiom set via `axioms.hypothesis()`.
-
-### Step 5: Document what's NOT covered
-
-Every framed problem should include a comment block:
+### Step 6: Document the traceability map
 
 ```python
-# What this proof would establish:
-#   <what the hypothesis means in domain terms>
+# Requirements traceability (proof hashes filled in after construction)
 #
-# What this proof would NOT establish:
-#   <what's out of scope — robustness, implementation correctness, etc.>
+# REQ-STAB → hypothesis: closed_loop_stable       → proof hash: TBD
+# REQ-CTRL → hypothesis: system_controllable       → proof hash: TBD
+# REQ-OBS  → hypothesis: system_observable         → proof hash: TBD
 #
-# Suggested proof strategy:
-#   <if the framer has intuition about how to prove it, capture it>
+# Dependencies:
+#   REQ-STAB depends on: (none — independent)
+#   REQ-CTRL depends on: (none — independent)
+#   REQ-OBS  depends on: (none — independent)
+#
+# Simulation & test coverage needed for:
+#   - Robustness to ±20% inertia uncertainty (Monte Carlo)
+#   - Discrete-time stability (Tustin transform analysis)
+#   - Actuator saturation behavior (HIL test)
 ```
 
-### Step 6: Save the framed problem
+### Step 7: Save the framed problem
 
-Write a Python file (e.g., `framed_<name>.py`) containing:
-1. Symbol declarations with comments
-2. AxiomSet
-3. Hypothesis (or hypotheses)
-4. Scope documentation
+Write a Python file containing:
+1. Symbol declarations with units
+2. AxiomSet (shared)
+3. Each hypothesis (independent)
+4. Traceability map (as comments)
+5. Scope documentation (what's NOT covered, what needs simulation/testing)
 
-The file should be importable — a prover will `from framed_<name> import axioms, hypothesis`.
+The file should be importable: `from framed_satellite import axioms, h_stability, h_controllable`
 
 ## What you do NOT do
 
-- Do NOT construct lemmas
-- Do NOT call `ProofBuilder`
-- Do NOT call `seal()`
-- Do NOT import from `symproof.library`
-- Do NOT try to prove anything
-
-Your output is ONLY the problem statement. The prover picks it up from here.
-
-## Example output structure
-
-```python
-"""Framed proof: AMM swap output is positive.
-
-Framer: <domain expert>
-Date: <date>
-Domain: DeFi / AMM constant-product
-
-What this proof would establish:
-    The swap output dy is strictly positive for any positive input dx,
-    given positive reserves and a fee rate in (0, 1).
-
-What this proof would NOT establish:
-    - Integer truncation effects (Solidity uses floor division)
-    - That the output exceeds gas costs (economic viability)
-    - Reentrancy safety of the swap function
-"""
-
-import sympy
-from symproof import Axiom, AxiomSet
-
-Rx = sympy.Symbol("R_x", positive=True)   # reserve of token X [wei]
-Ry = sympy.Symbol("R_y", positive=True)   # reserve of token Y [wei]
-fee = sympy.Symbol("f")                    # fee rate (dimensionless)
-dx = sympy.Symbol("dx", positive=True)    # input amount [wei]
-
-axioms = AxiomSet(
-    name="amm_constant_product",
-    axioms=(
-        Axiom(name="reserve_x_positive", expr=Rx > 0),
-        Axiom(name="reserve_y_positive", expr=Ry > 0),
-        Axiom(name="fee_positive", expr=fee > 0),
-        Axiom(name="fee_below_one", expr=fee < 1),
-        Axiom(name="input_positive", expr=dx > 0),
-    ),
-)
-
-dy = Ry * dx * (1 - fee) / (Rx + dx * (1 - fee))
-
-hypothesis = axioms.hypothesis(
-    "swap_output_positive",
-    expr=dy > 0,
-    description="AMM swap output is strictly positive",
-)
-```
+- Do NOT construct lemmas or call ProofBuilder
+- Do NOT call seal()
+- Do NOT combine independent properties into one hypothesis
+- Do NOT import from symproof.library (that's the prover's job)
