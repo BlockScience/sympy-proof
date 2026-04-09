@@ -174,7 +174,12 @@ script = (
     .build()
 )
 
-bundle = seal(axioms, hypothesis, script)
+def make_supermartingale_bundle():
+    """Build and return the supermartingale finite-time foundation bundle."""
+    return seal(axioms, hypothesis, script)
+
+
+bundle = make_supermartingale_bundle()
 
 # ─── Output ─────────────────────────────────────────────────────
 print("Solo-Kong Thm E.7.4 — Finite-time return to zero")

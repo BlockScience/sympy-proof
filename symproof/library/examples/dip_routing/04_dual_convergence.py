@@ -36,14 +36,22 @@ What this does NOT prove
 Run: uv run python -m symproof.library.examples.dip_routing.04_dual_convergence
 """
 
+import importlib
+
 import sympy
 
 from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+
+_mod_07 = importlib.import_module(
+    "symproof.library.examples.dip_routing.07_flam_convergence"
+)
+make_flam_bundle = _mod_07.make_flam_bundle
 
 # ─── Symbols ────────────────────────────────────────────────────
 t = sympy.Symbol("t", positive=True, integer=True)
 gamma = sympy.Symbol("gamma", positive=True)  # gradient bound from Lemma 2
 alpha = sympy.Symbol("alpha")  # momentum / discounting in [0, 1)
+V_t = sympy.Symbol("V_t", nonnegative=True)  # optimality gap (from Flam foundation)
 
 # Standard Robbins-Monro step size: epsilon_t = 1/t
 epsilon_t = 1 / t
@@ -72,7 +80,38 @@ axioms = AxiomSet(
                 "Flam [19], Theorem 2: For a concave function with bounded "
                 "stochastic gradient and step sizes satisfying sum eps_t = inf, "
                 "sum eps_t^2 < inf, the stochastic heavy ball iterates converge "
-                "to the optimum with probability one. External result."
+                "to the optimum with probability one. "
+                "Proved computationally in 07_flam_convergence."
+            ),
+        ),
+        # Inherited from Flam foundation (07_flam_convergence)
+        Axiom(
+            name="lyapunov_nonneg",
+            expr=V_t >= 0,
+            inherited=True,
+            description=(
+                "Optimality gap V_t = h(lambda*) - h(lambda_t) >= 0. "
+                "Required by Flam's convergence argument."
+            ),
+        ),
+        Axiom(
+            name="concavity_descent",
+            expr=sympy.S.true,
+            inherited=True,
+            description=(
+                "For concave h with Lipschitz gradient, one stochastic step "
+                "satisfies E[V_{t+1}] <= V_t - eps*||grad||^2 + eps^2*gamma^2. "
+                "Required by Flam's convergence argument."
+            ),
+        ),
+        Axiom(
+            name="robbins_siegmund",
+            expr=sympy.S.true,
+            inherited=True,
+            description=(
+                "Robbins-Siegmund: nonneg stochastic process with summable "
+                "negative drift converges a.s. "
+                "Required by Flam's convergence argument."
             ),
         ),
     ),
@@ -138,7 +177,11 @@ script = (
     .build()
 )
 
-bundle = seal(axioms, hypothesis, script)
+flam_foundation = make_flam_bundle()
+bundle = seal(
+    axioms, hypothesis, script,
+    foundations=[(flam_foundation, "flam_theorem")],
+)
 
 # ─── Output ─────────────────────────────────────────────────────
 print("Proposition 2: Dual variable convergence")

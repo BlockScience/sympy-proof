@@ -42,9 +42,16 @@ What this does NOT prove
 Run: uv run python -m symproof.library.examples.dip_routing.03_lagrangian_structure
 """
 
+import importlib
+
 import sympy
 
 from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+
+_mod_06 = importlib.import_module(
+    "symproof.library.examples.dip_routing.06_danskin_concrete"
+)
+make_danskin_bundle = _mod_06.make_danskin_bundle
 
 # ─── Symbols ────────────────────────────────────────────────────
 r = sympy.Symbol("r", nonnegative=True)  # routing rate
@@ -99,7 +106,17 @@ axioms = AxiomSet(
                 "Danskin's theorem: for strongly concave f, the dual "
                 "h(lambda) = max_r L(r, lambda) is differentiable and "
                 "nabla h(lambda) is given by substituting the unique maximiser. "
-                "External result — not proved here."
+                "Proved computationally in 06_danskin_concrete."
+            ),
+        ),
+        # Inherited from Danskin foundation (06_danskin_concrete)
+        Axiom(
+            name="maximiser_exists",
+            expr=sympy.S.true,
+            inherited=True,
+            description=(
+                "The maximiser r*(lambda) exists on the compact feasible "
+                "set [0, C_max]. Topological assumption from Danskin proof."
             ),
         ),
     ),
@@ -166,7 +183,11 @@ script = (
     .build()
 )
 
-bundle = seal(axioms, hypothesis, script)
+danskin_foundation = make_danskin_bundle()
+bundle = seal(
+    axioms, hypothesis, script,
+    foundations=[(danskin_foundation, "danskin_theorem")],
+)
 
 # ─── Output ─────────────────────────────────────────────────────
 print("Proposition 1 (concrete case): Lagrangian structure")

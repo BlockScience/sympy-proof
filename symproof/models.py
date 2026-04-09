@@ -31,6 +31,11 @@ class Axiom(BaseModel):
     name: str
     expr: SympyBoolean
     description: str = ""
+    inherited: bool = False
+    """True if this axiom was inherited from a foundation proof rather
+    than posited directly.  Inherited axioms represent conditions that
+    the proof chain forced — they were not chosen by the proof author
+    but are required by an external theorem the proof depends on."""
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +73,23 @@ class AxiomSet(BaseModel):
                         "name": a.name,
                         "expr": a.expr,
                         "description": a.description,
+                        "inherited": a.inherited,
                     }
                     for a in self.axioms
                 ],
             }
         )
+
+    def true_axioms(self) -> tuple[Axiom, ...]:
+        """Return axioms whose expression is ``sympy.S.true`` (external results)."""
+        return tuple(a for a in self.axioms if a.expr is sympy.S.true)
+
+    def get_axiom(self, name: str) -> Axiom | None:
+        """Look up an axiom by name, or return None."""
+        for a in self.axioms:
+            if a.name == name:
+                return a
+        return None
 
     @property
     def axiom_set_hash(self) -> str:

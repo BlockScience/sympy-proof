@@ -200,7 +200,12 @@ script = (
     .build()
 )
 
-bundle = seal(axioms, hypothesis, script)
+def make_flam_bundle():
+    """Build and return the Flam convergence foundation bundle."""
+    return seal(axioms, hypothesis, script)
+
+
+bundle = make_flam_bundle()
 
 # ─── Output ─────────────────────────────────────────────────────
 print("Flam [19] Theorem 2 — Stochastic Heavy Ball Convergence")

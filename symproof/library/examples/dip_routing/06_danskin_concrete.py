@@ -72,8 +72,13 @@ axioms = AxiomSet(
     ),
 )
 
-# ─── Proof via library function ─────────────────────────────────
-bundle = envelope_theorem(axioms, f, r, lam)
+def make_danskin_bundle():
+    """Build and return the Danskin envelope theorem bundle for the DIP quadratic."""
+    return envelope_theorem(axioms, f, r, lam)
+
+
+# ─── Seal ───────────────────────────────────────────────────────
+bundle = make_danskin_bundle()
 
 # ─── Derived quantities for display ────────────────────────────
 r_star = sympy.solve(sympy.diff(f, r), r)[0]  # beta + lambda

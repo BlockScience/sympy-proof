@@ -41,9 +41,16 @@ What this does NOT prove
 Run: uv run python -m symproof.library.examples.dip_routing.05_queue_stability
 """
 
+import importlib
+
 import sympy
 
 from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+
+_mod_08 = importlib.import_module(
+    "symproof.library.examples.dip_routing.08_supermartingale_finite"
+)
+make_supermartingale_bundle = _mod_08.make_supermartingale_bundle
 
 # ─── Symbols ────────────────────────────────────────────────────
 # Queue and flow variables (per-component, scalar analysis)
@@ -58,6 +65,10 @@ xi = sympy.Symbol("xi", positive=True)            # strictness parameter
 a_bar = sympy.Symbol("a_bar", nonnegative=True)   # mean arrival rate
 R_out_star = sympy.Symbol("R_out_star", nonnegative=True)  # optimal outflow
 R_in_star = sympy.Symbol("R_in_star", nonnegative=True)    # optimal inflow
+
+# Symbols inherited from supermartingale foundation (08)
+Y_0 = sympy.Symbol("Y_0", nonnegative=True)   # starting process value
+delta = sympy.Symbol("delta", positive=True)    # minimum descent per step
 
 # ─── Queue evolution (eq. 2) ────────────────────────────────────
 # q_{t+1} = [q_t + a_t + R_in - R_out]^+
@@ -91,7 +102,33 @@ axioms = AxiomSet(
             description=(
                 "Solo & Kong [21], Theorem E.7.4: If a nonneg process Y_t "
                 "satisfies E[Y_{t+1} | F_t] <= Y_t - delta when Y_t > 0, "
-                "then lim inf Y_t = 0 a.s.  External result."
+                "then lim inf Y_t = 0 a.s. "
+                "Proved computationally in 08_supermartingale_finite."
+            ),
+        ),
+        # Inherited from supermartingale foundation (08_supermartingale_finite)
+        Axiom(
+            name="process_nonneg",
+            expr=Y_0 >= 0,
+            inherited=True,
+            description="The process Y_t is nonnegative. Required by Solo-Kong.",
+        ),
+        Axiom(
+            name="descent_per_step",
+            expr=delta > 0,
+            inherited=True,
+            description=(
+                "Each step decreases the process by at least delta > 0. "
+                "Required by Solo-Kong."
+            ),
+        ),
+        Axiom(
+            name="borel_cantelli_extension",
+            expr=sympy.S.true,
+            inherited=True,
+            description=(
+                "Borel-Cantelli: finite-time return from any starting point "
+                "implies lim inf = 0 a.s. Required by Solo-Kong."
             ),
         ),
     ),
@@ -165,7 +202,11 @@ script = (
     .build()
 )
 
-bundle = seal(axioms, hypothesis, script)
+supermartingale_foundation = make_supermartingale_bundle()
+bundle = seal(
+    axioms, hypothesis, script,
+    foundations=[(supermartingale_foundation, "supermartingale_convergence")],
+)
 
 # ─── Output ─────────────────────────────────────────────────────
 print("Proposition 3 + Corollary 1: Queue stability")

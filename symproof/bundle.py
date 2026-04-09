@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import sympy
 
 from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof
@@ -17,6 +19,7 @@ from symproof.models import (
     ProofScript,
     ProofStatus,
 )
+from symproof.serialization import canonical_srepr
 from symproof.verification import _build_q_context, verify_proof
 
 
@@ -57,18 +60,74 @@ def _check_assumptions_consistent(
                 )
 
 
+def _check_foundations(
+    axiom_set: AxiomSet,
+    foundations: Sequence[tuple[ProofBundle, str]],
+) -> None:
+    """Validate that every axiom in each foundation is covered by ``axiom_set``.
+
+    For each ``(foundation_bundle, justified_axiom_name)``:
+
+    1. ``justified_axiom_name`` must exist in ``axiom_set``.
+    2. Every axiom in the foundation's axiom set must have a matching
+       axiom in ``axiom_set`` — by name first, then by canonical
+       expression.  Missing axioms are "hidden axioms" and cause a
+       ``ValueError``.
+
+    This enforces that downstream proofs explicitly declare all
+    conditions their foundations require.  Axioms inherited from
+    foundations should be marked ``inherited=True`` for traceability.
+    """
+    downstream_by_name = {a.name: a for a in axiom_set.axioms}
+    downstream_by_expr = {
+        canonical_srepr(a.expr): a.name
+        for a in axiom_set.axioms
+    }
+
+    for foundation_bundle, axiom_name in foundations:
+        # Check the justified axiom exists
+        target = axiom_set.get_axiom(axiom_name)
+        if target is None:
+            raise ValueError(
+                f"Foundation claims to justify axiom '{axiom_name}', "
+                f"but it does not exist in axiom set '{axiom_set.name}'."
+            )
+
+        # Check every foundation axiom is covered in downstream
+        hidden = []
+        for fa in foundation_bundle.axiom_set.axioms:
+            if fa.name in downstream_by_name:
+                continue
+            if canonical_srepr(fa.expr) in downstream_by_expr:
+                continue
+            hidden.append(fa.name)
+
+        if hidden:
+            raise ValueError(
+                f"Foundation bundle '{foundation_bundle.axiom_set.name}' "
+                f"(justifying '{axiom_name}') has axioms not present in "
+                f"axiom set '{axiom_set.name}': {hidden}. "
+                f"These are hidden axioms — add them to the axiom set "
+                f"with inherited=True."
+            )
+
+
 def seal(
     axiom_set: AxiomSet,
     hypothesis: Hypothesis,
     script: ProofScript,
+    *,
+    foundations: Sequence[tuple[ProofBundle, str]] | None = None,
 ) -> ProofBundle:
     """Verify a proof script and seal it into a ``ProofBundle``.
 
-    Enforces three preconditions:
+    Enforces four preconditions:
 
     1. ``script.axiom_set_hash`` matches the actual axiom set hash.
     2. ``script.target`` matches the hypothesis name.
     3. All lemmas pass verification.
+    4. For each foundation, every axiom in the foundation's axiom set
+       must appear in ``axiom_set`` (by name or expression).
 
     Parameters
     ----------
@@ -78,6 +137,12 @@ def seal(
         The claim being proved.
     script:
         The proof script targeting the hypothesis.
+    foundations:
+        Sequence of ``(foundation_bundle, justified_axiom_name)`` pairs.
+        Each foundation proves the content of an axiom in ``axiom_set``.
+        Every axiom in the foundation's axiom set must be present in
+        ``axiom_set``.  Missing axioms are hidden dependencies and
+        cause a ``ValueError``.
 
     Returns
     -------
@@ -87,7 +152,7 @@ def seal(
     Raises
     ------
     ValueError
-        If any precondition fails.
+        If any precondition fails, including hidden axioms in foundations.
     """
     actual_hash = hash_axiom_set(axiom_set)
 
@@ -121,6 +186,12 @@ def seal(
     # Check that lemma assumptions do not contradict axioms.
     # Axioms are authoritative — lemma assumptions must be consistent.
     _check_assumptions_consistent(axiom_set, script)
+
+    # Check foundations: every axiom in each foundation's axiom set
+    # must appear in this axiom set.  Missing axioms are "hidden" —
+    # conditions the proof depends on without declaring.
+    if foundations:
+        _check_foundations(axiom_set, foundations)
 
     # Always re-verify — no trust_imports shortcut when sealing.
     result = verify_proof(script, trust_imports=False)
