@@ -199,78 +199,35 @@ class TestPiecewiseExpressions:
     """Piecewise expressions from real mechanisms (e.g., clamped ratios)."""
 
     def test_piecewise_evaluation(self):
-        """Piecewise defined function evaluates correctly."""
-        x = sympy.Symbol("x", real=True)
-        pw = sympy.Piecewise((x, x > 0), (0, True))
+        """Piecewise collapse via library proof."""
+        from symproof.library.core import piecewise_collapse
 
+        x = sympy.Symbol("x")
         axioms = AxiomSet(
             name="piecewise_test",
             axioms=(Axiom(name="x_pos", expr=x > 0),),
         )
-        h = axioms.hypothesis("pw_equals_x", expr=sympy.Eq(pw, x))
-
-        # Under x > 0, the piecewise should equal x
-        # This tests whether BOOLEAN can handle Piecewise simplification
-        script = (
-            ProofBuilder(
-                axioms, h.name, name="pw_proof", claim="Piecewise(x if x>0) = x"
-            )
-            .lemma(
-                "pw_simplifies",
-                LemmaKind.EQUALITY,
-                expr=pw,
-                expected=x,
-                assumptions={"x": {"positive": True}},
-                description="Under x > 0, Piecewise collapses to x",
-            )
-            .build()
+        bundle = piecewise_collapse(
+            axioms, x, x > 0, sympy.Integer(0),
+            assumptions={"x": {"positive": True}},
         )
-        result = verify_proof(script)
-        # This may or may not pass — it's a known edge case
-        if result.status.value != "VERIFIED":
-            pytest.xfail(
-                f"Piecewise simplification under assumptions not yet supported: "
-                f"{result.failure_summary}"
-            )
+        assert bundle.bundle_hash
 
     def test_max_min_clamping(self):
-        """Max/Min clamping from Bitcoin difficulty adjustment."""
-        x = sympy.Symbol("x", positive=True)
+        """Max/Min lower bound via library proof."""
+        from symproof.library.core import max_ge_first
 
-        clamped = sympy.Max(sympy.Rational(1, 4), sympy.Min(4, x))
-
+        a = sympy.Rational(1, 4)
+        b = sympy.Symbol("b", real=True)
         axioms = AxiomSet(
             name="clamped",
-            axioms=(Axiom(name="x_pos", expr=x > 0),),
+            axioms=(
+                Axiom(name="quarter_real", expr=sympy.Eq(sympy.im(a), 0)),
+                Axiom(name="b_real", expr=sympy.Eq(sympy.im(b), 0)),
+            ),
         )
-        h = axioms.hypothesis(
-            "clamp_lower_bound",
-            expr=sympy.Ge(clamped, sympy.Rational(1, 4)),
-        )
-        script = (
-            ProofBuilder(
-                axioms,
-                h.name,
-                name="clamp_proof",
-                claim="Clamped value >= 1/4",
-            )
-            .lemma(
-                "max_ge_first",
-                LemmaKind.BOOLEAN,
-                expr=sympy.Ge(
-                    sympy.Max(sympy.Rational(1, 4), sympy.Min(4, x)),
-                    sympy.Rational(1, 4),
-                ),
-                assumptions={"x": {"positive": True}},
-                description="Max(a, b) >= a always",
-            )
-            .build()
-        )
-        result = verify_proof(script)
-        if result.status.value != "VERIFIED":
-            pytest.xfail(
-                f"Max/Min simplification: {result.failure_summary}"
-            )
+        bundle = max_ge_first(axioms, a, b)
+        assert bundle.bundle_hash
 
 
 # ===================================================================

@@ -237,123 +237,46 @@ class TestAMMConstantProduct:
     def amm_axioms(self):
         Rx = sympy.Symbol("R_x", positive=True)
         Ry = sympy.Symbol("R_y", positive=True)
-        fee = sympy.Symbol("f", positive=True)
+        fee = sympy.Symbol("f")
+        dx = sympy.Symbol("dx", positive=True)
         return AxiomSet(
             name="amm_constant_product",
             axioms=(
                 Axiom(name="reserve_x_positive", expr=Rx > 0),
                 Axiom(name="reserve_y_positive", expr=Ry > 0),
-                Axiom(name="fee_in_unit_interval", expr=sympy.And(fee > 0, fee < 1)),
+                Axiom(name="fee_positive", expr=fee > 0),
+                Axiom(name="fee_lt_one", expr=fee < 1),
+                Axiom(name="dx_positive", expr=dx > 0),
             ),
         )
 
-    @pytest.mark.xfail(
-        reason="SymPy Q-system cannot propagate positivity through "
-        "rational expressions with bounded-interval constraints (0 < f < 1)"
-    )
     def test_product_ratio_exceeds_one(self, amm_axioms):
-        """Post-swap product >= pre-swap product when fee > 0."""
+        """Post-swap product >= pre-swap via library proof."""
+        from symproof.library.defi import amm_product_nondecreasing
+
         Rx = sympy.Symbol("R_x", positive=True)
         Ry = sympy.Symbol("R_y", positive=True)
-        fee = sympy.Symbol("f", positive=True)
+        fee = sympy.Symbol("f")
         dx = sympy.Symbol("dx", positive=True)
 
-        # AMM output: dy = Ry * dx*(1-f) / (Rx + dx*(1-f))
-        net = dx * (1 - fee)
-        dy = Ry * net / (Rx + net)
-
-        # Post-swap reserves
-        Rx_new = Rx + dx
-        Ry_new = Ry - dy
-
-        # Product ratio
-        ratio = sympy.simplify((Rx_new * Ry_new) / (Rx * Ry))
-
-        h = amm_axioms.hypothesis(
-            "product_nondecreasing",
-            expr=sympy.Ge(Rx_new * Ry_new, Rx * Ry),
+        bundle = amm_product_nondecreasing(
+            amm_axioms, Rx, Ry, fee, dx
         )
-        script = (
-            ProofBuilder(
-                amm_axioms,
-                h.name,
-                name="amm_product_growth",
-                claim="Fee-bearing swap grows the invariant product",
-            )
-            .lemma(
-                "ratio_simplified",
-                LemmaKind.EQUALITY,
-                expr=ratio,
-                expected=(Rx + dx) / (Rx + dx * (1 - fee)),
-                assumptions={
-                    "R_x": {"positive": True},
-                    "R_y": {"positive": True},
-                    "f": {"positive": True},
-                    "dx": {"positive": True},
-                },
-                description="Product ratio simplifies to (Rx+dx)/(Rx+dx*(1-f))",
-            )
-            .lemma(
-                "ratio_ge_one",
-                LemmaKind.QUERY,
-                expr=sympy.Q.positive((Rx + dx) / (Rx + dx * (1 - fee)) - 1),
-                assumptions={
-                    "R_x": {"positive": True},
-                    "f": {"positive": True},
-                    "dx": {"positive": True},
-                },
-                depends_on=["ratio_simplified"],
-                description="Ratio > 1 since fee > 0",
-            )
-            .build()
-        )
-        result = verify_proof(script)
-        assert result.status.value == "VERIFIED", (
-            f"{result.failure_summary}\n"
-            + "\n".join(
-                f"  {lr.lemma_name}: passed={lr.passed}, error={lr.error}"
-                for lr in result.lemma_results
-            )
-        )
+        assert bundle.bundle_hash
 
-    @pytest.mark.xfail(
-        reason="SymPy Q-system cannot propagate positivity through "
-        "rational expressions with bounded-interval constraints (0 < f < 1)"
-    )
     def test_output_positive(self, amm_axioms):
-        """AMM output dy > 0 when reserves and input are positive."""
+        """AMM output dy > 0 via library proof."""
+        from symproof.library.defi import amm_output_positive
+
         Rx = sympy.Symbol("R_x", positive=True)
         Ry = sympy.Symbol("R_y", positive=True)
-        fee = sympy.Symbol("f", positive=True)
+        fee = sympy.Symbol("f")
         dx = sympy.Symbol("dx", positive=True)
 
-        net = dx * (1 - fee)
-        dy = Ry * net / (Rx + net)
-
-        h = amm_axioms.hypothesis("output_positive", expr=dy > 0)
-        script = (
-            ProofBuilder(
-                amm_axioms,
-                h.name,
-                name="output_positivity",
-                claim="AMM output is positive given positive inputs",
-            )
-            .lemma(
-                "dy_positive",
-                LemmaKind.QUERY,
-                expr=sympy.Q.positive(dy),
-                assumptions={
-                    "R_x": {"positive": True},
-                    "R_y": {"positive": True},
-                    "f": {"positive": True},
-                    "dx": {"positive": True},
-                },
-                description="dy > 0 from positive reserves and input",
-            )
-            .build()
+        bundle = amm_output_positive(
+            amm_axioms, Rx, Ry, fee, dx
         )
-        result = verify_proof(script)
-        assert result.status.value == "VERIFIED", result.failure_summary
+        assert bundle.bundle_hash
 
 
 # ===================================================================
