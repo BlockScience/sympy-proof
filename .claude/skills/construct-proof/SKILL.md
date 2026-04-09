@@ -94,22 +94,31 @@ script = (
 bundle = seal(axioms, hypothesis, script)
 ```
 
-### Step 6: Report
+### Step 6: Report and visualize
 
-Print:
-- The hypothesis name and description
-- Status (VERIFIED)
-- Bundle hash (this goes into the traceability matrix)
-- Advisories (each is a review item for the auditor)
-- Which requirement this maps to
+Print the traceability record, then render the proof visually so the engineer confirms the math and structure match their intent.
 
 ```python
+from symproof.export import latex_bundle, proof_dag_mermaid
+
 print(f"Requirement: REQ-STAB")
 print(f"Hypothesis:  {hypothesis.name}")
 print(f"Status:      {bundle.proof_result.status.value}")
 print(f"Hash:        {bundle.bundle_hash}")
 print(f"Advisories:  {len(bundle.proof_result.advisories)}")
+
+# Show the proof as the reviewer will see it
+print("\n--- Proof (LaTeX) ---")
+print(latex_bundle(bundle))
+
+# Show the dependency structure
+print("\n--- Proof DAG ---")
+print("```mermaid")
+print(proof_dag_mermaid(bundle))
+print("```")
 ```
+
+**Always show both views.** The LaTeX confirms the math (axioms, hypothesis, lemma chain, advisories). The DAG confirms the structure (what depends on what, which bundles are imported). If the engineer says "that's not what I meant," the visual makes the disagreement concrete and actionable.
 
 ### Step 7: Save
 
