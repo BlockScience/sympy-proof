@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "symproof"
+dynamic = ["version"]
+description = "Deterministic proof writing with SymPy — declare axioms, hypotheses, and build reproducible hashed proofs."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+keywords = ["sympy", "proof", "formal-verification", "symbolic-math", "deterministic", "hashing"]
+dependencies = [
+    "sympy>=1.12",
+    "pydantic>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.hatch.version]
+path = "symproof/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "TCH", "RUF"]

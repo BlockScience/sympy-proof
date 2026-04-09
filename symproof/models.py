@@ -1,0 +1,334 @@
+"""Core data models for symproof.
+
+All models are frozen Pydantic BaseModels with ``arbitrary_types_allowed``
+for SymPy expression fields.
+
+Key design principle: **no hypothesis without axioms**.  A ``Hypothesis``
+is always bound to an ``AxiomSet`` via ``axiom_set_hash``.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any, Self
+
+import sympy
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from symproof.serialization import make_canonical_dict
+from symproof.types import SympyBoolean, SympyExpr  # noqa: TC001
+
+# ---------------------------------------------------------------------------
+# Axiom
+# ---------------------------------------------------------------------------
+
+
+class Axiom(BaseModel):
+    """An accepted truth — a SymPy boolean expression taken as given."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    expr: SympyBoolean
+    description: str = ""
+
+
+# ---------------------------------------------------------------------------
+# AxiomSet
+# ---------------------------------------------------------------------------
+
+
+class AxiomSet(BaseModel):
+    """Named, immutable collection of axioms.
+
+    The hashable "context" all reasoning operates within.  Every hypothesis
+    and proof script is bound to an axiom set via its hash.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    axioms: tuple[Axiom, ...]
+
+    @model_validator(mode="after")
+    def _unique_axiom_names(self) -> Self:
+        names = [a.name for a in self.axioms]
+        dupes = {n for n in names if names.count(n) > 1}
+        if dupes:
+            raise ValueError(f"Duplicate axiom names in AxiomSet: {dupes}")
+        return self
+
+    def canonical_dict(self) -> dict:
+        """Sorted, srepr'd canonical form for hashing."""
+        return make_canonical_dict(
+            {
+                "name": self.name,
+                "axioms": [
+                    {
+                        "name": a.name,
+                        "expr": a.expr,
+                        "description": a.description,
+                    }
+                    for a in self.axioms
+                ],
+            }
+        )
+
+    @property
+    def axiom_set_hash(self) -> str:
+        """SHA-256 hex digest of the canonical form."""
+        from symproof.hashing import hash_axiom_set
+
+        return hash_axiom_set(self)
+
+    def hypothesis(
+        self,
+        name: str,
+        expr: SympyBoolean,
+        description: str = "",
+    ) -> Hypothesis:
+        """Create a hypothesis bound to this axiom set."""
+        return Hypothesis(
+            name=name,
+            expr=expr,
+            axiom_set_hash=self.axiom_set_hash,
+            description=description,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Hypothesis
+# ---------------------------------------------------------------------------
+
+
+class Hypothesis(BaseModel):
+    """A claim to prove or disprove, always bound to an axiom set.
+
+    The axiom set gives meaning to the symbols and provides the reasoning
+    context.  A hypothesis cannot be constructed without ``axiom_set_hash``.
+
+    The preferred construction path is ``axiom_set.hypothesis(...)``.
+    Direct construction is supported for deserialization.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    expr: SympyBoolean
+    axiom_set_hash: str
+    description: str = ""
+
+    def negate(self) -> Hypothesis:
+        """Return a new hypothesis with the negated expression, same axiom binding."""
+        return Hypothesis(
+            name=f"not_{self.name}",
+            expr=sympy.Not(self.expr),
+            axiom_set_hash=self.axiom_set_hash,
+            description=f"Negation of: {self.description}" if self.description else "",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Lemma types
+# ---------------------------------------------------------------------------
+
+
+class LemmaKind(StrEnum):
+    """The three verification strategies SymPy handles reliably."""
+
+    EQUALITY = "equality"
+    """``simplify(expr - expected) == 0`` or ``expr.doit() == expected``."""
+
+    BOOLEAN = "boolean"
+    """``simplify(expr)`` is ``sympy.true``."""
+
+    QUERY = "query"
+    """``sympy.ask(expr, assumption_context)`` is ``True``."""
+
+
+class Lemma(BaseModel):
+    """A single verifiable SymPy claim within a proof script."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    kind: LemmaKind
+    expr: SympyExpr
+    expected: SympyExpr | None = None
+    """Required for EQUALITY lemmas; the value ``expr`` must equal."""
+
+    assumptions: dict[str, dict] = {}
+    """symbol_name -> SymPy assumption kwargs, e.g. ``{"x": {"positive": True}}``."""
+
+    depends_on: list[str] = []
+    """Names of prior lemmas whose results this lemma logically depends on."""
+
+    description: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Proof status & results
+# ---------------------------------------------------------------------------
+
+
+class ProofStatus(StrEnum):
+    """Overall proof verification status."""
+
+    UNCHECKED = "UNCHECKED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+
+
+class LemmaResult(BaseModel):
+    """Verification output for a single lemma."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    lemma_name: str
+    passed: bool
+    actual_value: SympyExpr | None = None
+    error: str | None = None
+
+
+class ProofResult(BaseModel):
+    """Verification output for a complete proof script."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    status: ProofStatus
+    proof_hash: str | None = None
+    lemma_results: tuple[LemmaResult, ...] = ()
+    failure_summary: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# ProofScript
+# ---------------------------------------------------------------------------
+
+
+class ProofScript(BaseModel):
+    """An ordered chain of lemmas targeting one hypothesis, bound to an axiom set."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    name: str
+    target: str
+    """Hypothesis name this proof targets."""
+
+    axiom_set_hash: str
+    """SHA-256 hex digest of the axiom set this proof is bound to."""
+
+    claim: str
+    """Human-readable statement of what the proof chain establishes."""
+
+    lemmas: tuple[Lemma, ...]
+
+    def to_evidence(self) -> dict[str, Any]:
+        """Serialize as a JSON-compatible evidence record.
+
+        Each lemma expression is serialized with ``sympy.srepr`` for
+        deterministic round-trip.
+        """
+        return {
+            "name": self.name,
+            "target": self.target,
+            "axiom_set_hash": self.axiom_set_hash,
+            "claim": self.claim,
+            "lemmas": [
+                {
+                    "name": lem.name,
+                    "kind": lem.kind.value,
+                    "expr": sympy.srepr(lem.expr),
+                    "expected": (
+                        sympy.srepr(lem.expected) if lem.expected is not None else None
+                    ),
+                    "assumptions": lem.assumptions,
+                    "depends_on": lem.depends_on,
+                    "description": lem.description,
+                }
+                for lem in self.lemmas
+            ],
+        }
+
+    @classmethod
+    def from_evidence(cls, data: dict[str, Any]) -> ProofScript:
+        """Restore a ``ProofScript`` from an evidence dict.
+
+        Inverse of ``to_evidence()``.
+        """
+        lemmas = []
+        for ld in data["lemmas"]:
+            lemmas.append(
+                Lemma(
+                    name=ld["name"],
+                    kind=LemmaKind(ld["kind"]),
+                    expr=sympy.sympify(ld["expr"]),
+                    expected=(
+                        sympy.sympify(ld["expected"])
+                        if ld.get("expected") is not None
+                        else None
+                    ),
+                    assumptions=ld.get("assumptions", {}),
+                    depends_on=ld.get("depends_on", []),
+                    description=ld.get("description", ""),
+                )
+            )
+        return cls(
+            name=data["name"],
+            target=data["target"],
+            axiom_set_hash=data["axiom_set_hash"],
+            claim=data["claim"],
+            lemmas=tuple(lemmas),
+        )
+
+
+# ---------------------------------------------------------------------------
+# ProofBundle
+# ---------------------------------------------------------------------------
+
+
+class ProofBundle(BaseModel):
+    """The sealed, verified triple: (axioms, hypothesis, proof).
+
+    Produced exclusively by ``seal()``.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    axiom_set: AxiomSet
+    hypothesis: Hypothesis
+    proof: ProofScript
+    proof_result: ProofResult
+    bundle_hash: str
+
+    @model_validator(mode="after")
+    def _must_be_verified(self) -> Self:
+        if self.proof_result.status != ProofStatus.VERIFIED:
+            raise ValueError(
+                f"ProofBundle requires VERIFIED status, got {self.proof_result.status}"
+            )
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Disproof
+# ---------------------------------------------------------------------------
+
+
+class Disproof(BaseModel):
+    """Compositional disproof of H under A.
+
+    Holds a ``ProofBundle`` that proves ~H under the same axiom set.
+    Produced exclusively by ``disprove()``.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    hypothesis: Hypothesis
+    """The original hypothesis being disproved."""
+
+    negation_bundle: ProofBundle
+    """The sealed bundle proving ~H under the same axiom set."""
+
+    disproof_hash: str
+    """SHA-256 binding H and the negation bundle."""
