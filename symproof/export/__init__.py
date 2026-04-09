@@ -21,6 +21,7 @@ Graph (DAG)::
 from symproof.export.graph import (
     proof_dag,
     proof_dag_dot,
+    proof_dag_json,
     proof_dag_mermaid,
 )
 from symproof.export.latex import (
@@ -37,5 +38,6 @@ __all__ = [
     "latex_proof",
     "proof_dag",
     "proof_dag_dot",
+    "proof_dag_json",
     "proof_dag_mermaid",
 ]

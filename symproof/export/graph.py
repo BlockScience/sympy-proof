@@ -9,11 +9,14 @@ Render with graphviz, networkx, mermaid, or any graph library.
 
 Public API::
 
-    from symproof.export.graph import proof_dag, proof_dag_dot, proof_dag_mermaid
+    from symproof.export.graph import (
+        proof_dag, proof_dag_json, proof_dag_dot, proof_dag_mermaid,
+    )
 
-    dag = proof_dag(bundle)               # dict with nodes + edges
-    dot = proof_dag_dot(bundle)           # graphviz DOT source
-    mmd = proof_dag_mermaid(bundle)       # mermaid source
+    dag = proof_dag(bundle)            # dict with nodes + edges
+    jsn = proof_dag_json(bundle)       # JSON node-link (d3/networkx/neo4j)
+    dot = proof_dag_dot(bundle)        # graphviz DOT source
+    mmd = proof_dag_mermaid(bundle)    # mermaid source
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 import sympy
 
 if TYPE_CHECKING:
-    from symproof.models import Lemma, LemmaResult, ProofBundle, ProofResult
+    from symproof.models import LemmaResult, ProofBundle
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +161,110 @@ def proof_dag(
         )
 
     return {"nodes": nodes, "edges": edges}
+
+
+# ---------------------------------------------------------------------------
+# JSON node-link format (d3.js / networkx / neo4j)
+# ---------------------------------------------------------------------------
+
+
+def proof_dag_json(
+    *bundles: ProofBundle,
+    expand_lemmas: bool = True,
+    indent: int = 2,
+) -> str:
+    """Render a proof DAG as JSON in the node-link format.
+
+    The output is directly consumable by:
+
+    - **d3.js** force-directed graph (``d3.forceSimulation``)
+    - **networkx** (``nx.node_link_graph(json.loads(s))``)
+    - **neo4j** (``UNWIND $nodes AS n CREATE (n:Node) SET n = n``)
+    - **vis.js**, **cytoscape.js**, or any tool expecting node-link JSON
+
+    Schema::
+
+        {
+          "directed": true,
+          "multigraph": false,
+          "graph": {                      # metadata
+            "name": "Proof DAG",
+            "schema_version": 1,
+            "tool_hints": {
+              "d3": "nodes[].id as key, links[].source/target as id strings",
+              "networkx": "nx.node_link_graph(data)",
+              "neo4j": "UNWIND $nodes AS n CREATE (n:Node) SET n = n"
+            }
+          },
+          "nodes": [
+            {"id": "...", "type": "bundle"|"lemma", ...},
+          ],
+          "links": [
+            {"source": "...", "target": "...",
+             "type": "imports"|"depends_on"|"contains"},
+          ]
+        }
+
+    The ``directed``, ``multigraph``, and ``graph`` keys follow the
+    networkx node-link convention so that ``nx.node_link_graph()``
+    works without any transformation.
+
+    Parameters
+    ----------
+    *bundles:
+        Proof bundles to serialize.
+    expand_lemmas:
+        Include individual lemma nodes (True) or bundle-level only.
+    indent:
+        JSON indentation.  Set to ``None`` for compact output.
+
+    Returns
+    -------
+    str
+        JSON string.
+    """
+    import json
+
+    dag = proof_dag(*bundles, expand_lemmas=expand_lemmas)
+
+    output = {
+        "directed": True,
+        "multigraph": False,
+        "graph": {
+            "name": "Proof DAG",
+            "schema_version": 1,
+            "tool_hints": {
+                "d3": (
+                    "Use nodes[].id as node key. "
+                    "links[].source and links[].target are id strings. "
+                    "Node type is 'bundle' or 'lemma'."
+                ),
+                "networkx": (
+                    "import networkx as nx; "
+                    "G = nx.node_link_graph(json.loads(s))"
+                ),
+                "neo4j": (
+                    "UNWIND $data.nodes AS n "
+                    "CREATE (p:ProofNode) SET p = n; "
+                    "UNWIND $data.links AS e "
+                    "MATCH (a:ProofNode {id: e.source}), "
+                    "(b:ProofNode {id: e.target}) "
+                    "CREATE (a)-[:LINK {type: e.type}]->(b)"
+                ),
+            },
+        },
+        "nodes": dag["nodes"],
+        "links": [
+            {
+                "source": e["source"],
+                "target": e["target"],
+                "type": e["type"],
+            }
+            for e in dag["edges"]
+        ],
+    }
+
+    return json.dumps(output, indent=indent)
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +433,7 @@ def proof_dag_mermaid(
             if kind == "equality":
                 lines.append(f'    {nid}["{label}"]')
             elif kind == "boolean":
-                lines.append(f'    {nid}{{{"{label}"}}}')
+                lines.append(f"    {nid}{{{{{label}}}}}")
             elif kind == "query":
                 lines.append(f'    {nid}("{label}")')
             else:
