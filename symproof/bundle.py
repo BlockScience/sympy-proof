@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import sympy
+
 from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof
 from symproof.models import (
     AxiomSet,
@@ -15,11 +17,44 @@ from symproof.models import (
     ProofScript,
     ProofStatus,
 )
-from symproof.verification import verify_proof
+from symproof.verification import _build_q_context, verify_proof
 
 
 class ContradictionError(Exception):
     """Raised when both H and ~H are proved under the same axiom set."""
+
+
+def _check_assumptions_consistent(
+    axiom_set: AxiomSet,
+    script: ProofScript,
+) -> None:
+    """Verify that lemma assumptions do not contradict axiom expressions.
+
+    For each lemma, builds a Q-context from its assumptions and checks
+    every axiom expression against it.  If ``sympy.ask`` determines that
+    an axiom is **False** under the lemma's assumptions, the assumptions
+    contradict the axiom set and the proof is rejected.
+
+    Only proven contradictions (``ask`` returns ``False``) are rejected.
+    Indeterminate results (``None``) are allowed.
+    """
+    for lemma in script.lemmas:
+        if not lemma.assumptions:
+            continue
+        context = _build_q_context(lemma.assumptions)
+        for axiom in axiom_set.axioms:
+            try:
+                result = sympy.ask(sympy.Q.is_true(axiom.expr), context)
+            except (TypeError, ValueError, RecursionError, AttributeError):
+                continue
+            if result is False:
+                raise ValueError(
+                    f"Lemma '{lemma.name}' assumptions contradict axiom "
+                    f"'{axiom.name}': under assumptions {lemma.assumptions}, "
+                    f"axiom expression {axiom.expr} is provably False. "
+                    f"Axioms are authoritative — lemma assumptions must be "
+                    f"consistent with the axiom set."
+                )
 
 
 def seal(
@@ -71,6 +106,10 @@ def seal(
             f"script.target={script.target!r} does not match "
             f"hypothesis.name={hypothesis.name!r}"
         )
+
+    # Check that lemma assumptions do not contradict axioms.
+    # Axioms are authoritative — lemma assumptions must be consistent.
+    _check_assumptions_consistent(axiom_set, script)
 
     result = verify_proof(script)
     if result.status != ProofStatus.VERIFIED:

@@ -61,6 +61,61 @@ def _build_q_context(assumptions: dict[str, dict]) -> sympy.Basic:
 
 
 # ---------------------------------------------------------------------------
+# Advisory detection helpers
+# ---------------------------------------------------------------------------
+
+_DIVISION_ADVISORY = (
+    "EQUALITY verified via simplify(), which performs algebraic cancellation "
+    "that may ignore domain restrictions (e.g., division by zero, branch cuts). "
+    "Review this step for expressions involving division, logarithms, or "
+    "fractional powers."
+)
+
+_DOIT_ADVISORY = (
+    "EQUALITY verified via .doit() fallback (symbolic evaluation of "
+    "Sum/Product/Integral), not direct simplification. This path is less "
+    "well-tested than simplify() — verify the closed-form result."
+)
+
+_REFINE_ADVISORY = (
+    "BOOLEAN verified via refine() fallback, not simplify(). refine() uses "
+    "heuristic relational reasoning that is sound but incomplete. Review "
+    "this implication step for correctness."
+)
+
+_NEGATION_ADVISORY = (
+    "BOOLEAN verified via proof-by-contradiction: simplify(And(P, Not(Q))) "
+    "returned False. This is sound but depends on simplify() recognizing "
+    "the contradiction — review the antecedent/consequent pair."
+)
+
+_QUERY_ADVISORY = (
+    "QUERY verified via sympy.ask(), which uses heuristic assumption "
+    "propagation. The Q-system cannot reason about bounded intervals "
+    "(e.g., 0 < x < 1) or complex compound expressions."
+)
+
+
+def _has_division(expr: sympy.Basic) -> bool:
+    """Check if an expression contains division (Pow with negative exponent)."""
+    if isinstance(expr, sympy.Pow) and expr.exp.is_negative:
+        return True
+    return any(_has_division(arg) for arg in expr.args)
+
+
+def _has_domain_sensitive_ops(expr: sympy.Basic) -> bool:
+    """Check if an expression contains operations with domain restrictions."""
+    if _has_division(expr):
+        return True
+    if isinstance(expr, (sympy.log, sympy.Abs)):
+        return True
+    # sqrt is Pow(x, 1/2)
+    if isinstance(expr, sympy.Pow) and expr.exp == sympy.Rational(1, 2):
+        return True
+    return any(_has_domain_sensitive_ops(arg) for arg in expr.args)
+
+
+# ---------------------------------------------------------------------------
 # Lemma verification
 # ---------------------------------------------------------------------------
 
@@ -81,6 +136,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
     try:
         assumption_subs = _build_assumption_subs(lemma.assumptions)
         expr_with_assumptions = lemma.expr.subs(assumption_subs)
+        advisories: list[str] = []
 
         if lemma.kind == LemmaKind.EQUALITY:
             if lemma.expected is None:
@@ -90,17 +146,40 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                     error="EQUALITY lemma requires 'expected' to be set",
                 )
             expected_with_assumptions = lemma.expected.subs(assumption_subs)
+
+            # Check for domain-sensitive operations in both the original
+            # expressions and the assumption-substituted forms.
+            has_domain_risk = _has_domain_sensitive_ops(
+                lemma.expr
+            ) or _has_domain_sensitive_ops(expr_with_assumptions)
+            if lemma.expected is not None:
+                has_domain_risk = has_domain_risk or (
+                    _has_domain_sensitive_ops(lemma.expected)
+                    or _has_domain_sensitive_ops(expected_with_assumptions)
+                )
+
             diff = sympy.simplify(expr_with_assumptions - expected_with_assumptions)
             if diff == sympy.Integer(0):
+                if has_domain_risk:
+                    advisories.append(_DIVISION_ADVISORY)
                 return LemmaResult(
-                    lemma_name=lemma.name, passed=True, actual_value=sympy.Integer(0)
+                    lemma_name=lemma.name,
+                    passed=True,
+                    actual_value=sympy.Integer(0),
+                    advisories=tuple(advisories),
                 )
             # Fallback: try .doit() for Sum/Product expressions
             evaluated = expr_with_assumptions.doit()
             diff = evaluated - expected_with_assumptions
             if sympy.simplify(diff) == sympy.Integer(0):
+                advisories.append(_DOIT_ADVISORY)
+                if has_domain_risk:
+                    advisories.append(_DIVISION_ADVISORY)
                 return LemmaResult(
-                    lemma_name=lemma.name, passed=True, actual_value=evaluated
+                    lemma_name=lemma.name,
+                    passed=True,
+                    actual_value=evaluated,
+                    advisories=tuple(advisories),
                 )
             return LemmaResult(
                 lemma_name=lemma.name,
@@ -112,6 +191,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
         if lemma.kind == LemmaKind.BOOLEAN:
             result = sympy.simplify(expr_with_assumptions)
             passed = result is sympy.true
+            verified_via = "simplify"
 
             if not passed and not isinstance(
                 expr_with_assumptions, sympy.assumptions.assume.AppliedPredicate
@@ -124,6 +204,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                     if refined is sympy.true:
                         passed = True
                         result = refined
+                        verified_via = "refine"
                 except (TypeError, ValueError, RecursionError, AttributeError):
                     pass
 
@@ -137,21 +218,51 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                     if negated is sympy.false:
                         passed = True
                         result = sympy.true
+                        verified_via = "negation"
                 except (TypeError, ValueError, RecursionError, AttributeError):
                     pass
 
+            if passed and verified_via == "refine":
+                advisories.append(_REFINE_ADVISORY)
+            if passed and verified_via == "negation":
+                advisories.append(_NEGATION_ADVISORY)
+
+            if not passed:
+                advisories.append(
+                    f"INDETERMINATE: simplify() returned {result!r}, not "
+                    f"sympy.true. SymPy could not determine the truth value "
+                    f"of this expression. This does not mean the claim is "
+                    f"false — it may require a different proof strategy."
+                )
+
             return LemmaResult(
-                lemma_name=lemma.name, passed=passed, actual_value=result
+                lemma_name=lemma.name,
+                passed=passed,
+                actual_value=result,
+                advisories=tuple(advisories),
             )
 
         if lemma.kind == LemmaKind.QUERY:
             context = _build_q_context(lemma.assumptions)
             ask_result = sympy.ask(expr_with_assumptions, context)
             passed = ask_result is True
+
+            if passed:
+                advisories.append(_QUERY_ADVISORY)
+            elif ask_result is None:
+                advisories.append(
+                    f"INDETERMINATE: sympy.ask() returned None for "
+                    f"{expr_with_assumptions!r}. The Q-system could not "
+                    f"determine this proposition under the given assumptions. "
+                    f"This does not mean the claim is false — it may require "
+                    f"stronger assumptions or a different proof strategy."
+                )
+
             return LemmaResult(
                 lemma_name=lemma.name,
                 passed=passed,
                 actual_value=sympy.true if passed else sympy.false,
+                advisories=tuple(advisories),
             )
 
         if lemma.kind == LemmaKind.COORDINATE_TRANSFORM:
@@ -281,8 +392,15 @@ def verify_proof(script: ProofScript) -> ProofResult:
                 failure_summary=f"Lemma '{lemma.name}' failed: {result.error}",
             )
 
+    # Aggregate advisories from all lemma results
+    all_advisories: list[str] = []
+    for lr in lemma_results:
+        for adv in lr.advisories:
+            all_advisories.append(f"[{lr.lemma_name}] {adv}")
+
     return ProofResult(
         status=ProofStatus.VERIFIED,
         proof_hash=hash_proof(script),
         lemma_results=tuple(lemma_results),
+        advisories=tuple(all_advisories),
     )

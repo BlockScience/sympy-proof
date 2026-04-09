@@ -212,6 +212,12 @@ class LemmaResult(BaseModel):
     passed: bool
     actual_value: SympyExpr | None = None
     error: str | None = None
+    advisories: tuple[str, ...] = ()
+    """Warnings about known SymPy limitations that apply to this result.
+
+    Present on both passing and failing lemmas.  A non-empty list signals
+    that a human reviewer should inspect this proof step.
+    """
 
 
 class ProofResult(BaseModel):
@@ -223,6 +229,8 @@ class ProofResult(BaseModel):
     proof_hash: str | None = None
     lemma_results: tuple[LemmaResult, ...] = ()
     failure_summary: str | None = None
+    advisories: tuple[str, ...] = ()
+    """Aggregated advisories from all lemma results."""
 
 
 # ---------------------------------------------------------------------------
