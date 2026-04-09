@@ -97,6 +97,11 @@ class ProofBuilder:
         self._imported_bundles.append(bundle)
         return self
 
+    def add_lemma(self, lemma: Lemma) -> ProofBuilder:
+        """Add a pre-constructed Lemma object to the proof chain."""
+        self._lemmas.append(lemma)
+        return self
+
     def lemma(
         self,
         name: str,

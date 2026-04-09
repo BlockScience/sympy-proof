@@ -4,6 +4,12 @@ __version__ = "0.1.0"
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import ContradictionError, check_consistency, disprove, seal
+from symproof.composite import (
+    CompositeType,
+    FixedPointType,
+    ReservePairType,
+    make_axiom_set,
+)
 from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof, hash_proof
 from symproof.models import (
     Axiom,
@@ -25,8 +31,10 @@ from symproof.verification import verify_lemma, verify_proof
 __all__ = [
     "Axiom",
     "AxiomSet",
+    "CompositeType",
     "ContradictionError",
     "Disproof",
+    "FixedPointType",
     "Hypothesis",
     "Lemma",
     "LemmaKind",
@@ -36,6 +44,7 @@ __all__ = [
     "ProofResult",
     "ProofScript",
     "ProofStatus",
+    "ReservePairType",
     "auto_lemma",
     "canonical_srepr",
     "check_consistency",
@@ -44,6 +53,7 @@ __all__ = [
     "hash_bundle",
     "hash_disproof",
     "hash_proof",
+    "make_axiom_set",
     "make_canonical_dict",
     "restore_expr",
     "seal",
