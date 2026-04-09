@@ -3,7 +3,7 @@
 
 Run::
 
-    uv run python -m symproof.library.examples.amm_swap_audit
+    uv run python -m symproof.library.examples.defi.01_amm_swap_audit
 
 Scope
 -----

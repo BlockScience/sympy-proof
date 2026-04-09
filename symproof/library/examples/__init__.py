@@ -4,7 +4,8 @@ Each subdirectory contains domain-specific examples. Run any
 example as a module::
 
     uv run python -m symproof.library.examples.control.01_stability
-    uv run python -m symproof.library.examples.convex.01_convexity
+    uv run python -m symproof.library.examples.convex.01_loss_function
+    uv run python -m symproof.library.examples.defi.01_amm_swap_audit
 
 Domains
 -------
@@ -15,4 +16,8 @@ control/
 convex/
     Convexity certification (scalar, Hessian, strong convexity),
     DCP composition rules, and end-to-end portfolio optimization.
+
+defi/
+    AMM swap audit: rounding direction, phantom overflow,
+    directional error chains, decimal mismatch, composed safety.
 """

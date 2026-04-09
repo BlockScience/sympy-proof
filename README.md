@@ -165,7 +165,7 @@ Tools for the numerical analysis issues Solidity auditors actually face.
 | `amm_output_positive(ax, Rx, Ry, fee, dx)` | AMM swap output > 0 |
 | `amm_product_nondecreasing(ax, Rx, Ry, fee, dx)` | Product invariant grows with fees |
 
-Run the walkthrough: `uv run python -m symproof.library.examples.amm_swap_audit`
+Run the walkthrough: `uv run python -m symproof.library.examples.defi.01_amm_swap_audit`
 
 ## Verification Strategies
 

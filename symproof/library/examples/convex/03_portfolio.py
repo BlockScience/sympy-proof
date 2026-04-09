@@ -1,43 +1,43 @@
 #!/usr/bin/env python3
-"""End-to-end: certify a Markowitz portfolio optimization formulation.
+"""Markowitz portfolio: certify formulation, catch degenerate cases.
 
 Scenario
 --------
-You're building a portfolio optimizer that minimizes variance subject
-to a target return.  Before deploying it (or submitting it for risk
-review), you need to certify that the problem formulation is convex —
-otherwise the solver may find a local minimum that isn't globally
-optimal, leading to suboptimal portfolio allocation.
+You're building a portfolio optimizer.  Before deploying (or submitting
+for risk review), you need to certify:
+  1. The objective is convex (solver finds global optimum)
+  2. It's strictly convex (optimal portfolio is unique)
+  3. The formulation doesn't degenerate (e.g., perfectly correlated assets)
 
-The Markowitz problem (2-asset simplified):
-    minimize    w1^2 * sigma1^2 + 2*rho*sigma1*sigma2*w1*w2 + w2^2 * sigma2^2
-    subject to  w1 + w2 = 1  (budget)
-                w1*mu1 + w2*mu2 >= r_target  (return)
-                w1, w2 >= 0  (no shorting)
+This example proves all three, then shows what breaks when assets are
+perfectly correlated — the strong convexity proof correctly fails.
 
-The objective is a quadratic form w^T Sigma w where Sigma is the
-covariance matrix.  This is convex iff Sigma is PSD.
+Scaling limits
+--------------
+Symbolic Hessian PSD via Sylvester's criterion works for 2-4 assets.
+For real portfolios (50-500 assets), use numerical eigenvalue checks
+instead: ``np.linalg.eigvalsh(Sigma).min() > 0``.  symproof is for
+certifying the FORMULATION STRUCTURE, not for 500x500 symbolic matrices.
 
 What this proves
 ----------------
-1. The covariance matrix is PSD (Hessian of objective)
-2. The objective is strictly convex if Sigma is PD (unique optimal portfolio)
-3. Uniqueness of the optimal portfolio (from strong convexity)
+- Covariance matrix Sigma is PSD → objective is convex
+- Sigma is PD (when |rho| < 1) → objective is strictly convex → unique portfolio
+- When rho = 1 (perfect correlation), strict convexity FAILS (correctly)
 
 What this does NOT prove
 ------------------------
-- That the covariance estimate Sigma is accurate (estimation error)
-- That the expected returns mu are correctly estimated
-- Transaction costs, liquidity constraints, or integer constraints
-- Out-of-sample performance (this is in-sample formulation only)
-- Constraint feasibility (return target may be unreachable)
+- Accuracy of Sigma and mu estimates (estimation error is the real risk)
+- Constraint feasibility (target return may be unreachable)
+- Out-of-sample performance (in-sample optimal ≠ out-of-sample optimal)
+- Transaction costs, liquidity, or integer share constraints
 
 What to do next
 ---------------
-1. Estimate Sigma and mu from historical data (or a factor model)
-2. Solve with CVXPY: cp.Problem(cp.Minimize(w @ Sigma @ w), constraints)
-3. Backtest the portfolio on out-of-sample data
-4. Sensitivity analysis: how does the optimal w change with Sigma?
+1. Estimate Sigma robustly (shrinkage, factor model)
+2. Solve: ``cp.Problem(cp.Minimize(cp.quad_form(w, Sigma)), constraints)``
+3. Backtest on out-of-sample data
+4. Stress test: re-run with perturbed Sigma to check sensitivity
 
 Run: uv run python -m symproof.library.examples.convex.03_portfolio
 """
@@ -47,106 +47,106 @@ import sympy
 from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
 from symproof.library.convex import convex_hessian, strongly_convex, unique_minimizer
 
-# ─── 2-asset Markowitz model ────────────────────────────────
+w1 = sympy.Symbol("w1", real=True)
+w2 = sympy.Symbol("w2", real=True)
 
-w1 = sympy.Symbol("w1", real=True)   # weight of asset 1
-w2 = sympy.Symbol("w2", real=True)   # weight of asset 2
+# ─── Concrete 2-asset portfolio: sigma1=20%, sigma2=30%, rho=0.5 ─
 
-# Volatilities and correlation
-sigma1 = sympy.Symbol("sigma1", positive=True)  # vol of asset 1
-sigma2 = sympy.Symbol("sigma2", positive=True)  # vol of asset 2
-rho = sympy.Symbol("rho", real=True)            # correlation
-
-# Portfolio variance: w^T Sigma w
-# Sigma = [[sigma1^2,            rho*sigma1*sigma2],
-#          [rho*sigma1*sigma2,   sigma2^2         ]]
 portfolio_var = (
-    w1**2 * sigma1**2
-    + 2 * rho * sigma1 * sigma2 * w1 * w2
-    + w2**2 * sigma2**2
+    w1**2 * sympy.Rational(1, 25)         # sigma1^2 = 0.04
+    + 2 * sympy.Rational(1, 2) * sympy.Rational(1, 5) * sympy.Rational(3, 10) * w1 * w2
+    + w2**2 * sympy.Rational(9, 100)      # sigma2^2 = 0.09
 )
-
-# For the covariance matrix to be PSD, we need |rho| < 1.
-# For PD (strict convexity), we need |rho| < 1 strictly,
-# which means the two assets are not perfectly correlated.
-
-# We'll work with concrete values for a provable example:
-# sigma1 = 0.2 (20% annual vol), sigma2 = 0.3, rho = 0.5
-concrete_var = portfolio_var.subs({
-    sigma1: sympy.Rational(1, 5),
-    sigma2: sympy.Rational(3, 10),
-    rho: sympy.Rational(1, 2),
-})
-
-print("Markowitz portfolio optimization (2 assets)")
-print("  sigma1 = 20%, sigma2 = 30%, rho = 0.5")
-print(f"  Objective: {sympy.expand(concrete_var)}")
+# Simplifies to: w1²/25 + 3·w1·w2/50 + 9·w2²/100
 
 axioms = AxiomSet(
     name="portfolio",
     axioms=(Axiom(name="formulation", expr=sympy.Eq(1, 1)),),
 )
 
-# ─── Step 1: Prove convexity (Hessian PSD) ──────────────────
+print("Markowitz portfolio (2 assets, sigma1=20%, sigma2=30%, rho=0.5)")
+print(f"  Objective: {sympy.expand(portfolio_var)}")
 
-print("\n1. Convexity: Hessian of portfolio variance is PSD")
-hess_bundle = convex_hessian(axioms, concrete_var, [w1, w2])
-print(f"   {hess_bundle.proof_result.status.value}")
+# Step 1: Hessian PSD → convex
+H = sympy.hessian(portfolio_var, [w1, w2])
+print(f"  Hessian: {H}")
 
-# The Hessian is 2*Sigma:
-H = sympy.hessian(concrete_var, [w1, w2])
-print(f"   Hessian = {H}")
-print(f"   Eigenvalues: {H.eigenvals()}")
+hess_bundle = convex_hessian(axioms, portfolio_var, [w1, w2])
+print(f"\n1. Convex (Hessian PSD)? {hess_bundle.proof_result.status.value}")
 
-# ─── Step 2: Strong convexity → unique portfolio ────────────
+# Step 2: Strong convexity → unique portfolio
+eigvals = sorted(H.eigenvals().keys())
+m = eigvals[0]  # minimum eigenvalue
+print(f"2. Min eigenvalue: {sympy.simplify(m)} ≈ {float(m):.6f}")
 
-# Minimum eigenvalue of 2*Sigma determines strong convexity parameter
-eigvals = list(H.eigenvals().keys())
-m = min(eigvals)
-print(f"\n2. Strong convexity: min eigenvalue = {m}")
+strong_bundle = strongly_convex(axioms, portfolio_var, [w1, w2], m)
+print(f"   {m}-strongly convex? {strong_bundle.proof_result.status.value}")
 
-strong_bundle = strongly_convex(axioms, concrete_var, [w1, w2], m)
-print(f"   {m}-strongly convex: {strong_bundle.proof_result.status.value}")
+# Step 3: Unique minimizer
+unique_bundle = unique_minimizer(axioms, portfolio_var, [w1, w2], m)
+print(f"3. Unique optimal portfolio? {unique_bundle.proof_result.status.value}")
 
-# ─── Step 3: Uniqueness of optimal portfolio ────────────────
-
-print(f"\n3. Unique minimizer: {m}-strongly convex => unique optimal portfolio")
-unique_bundle = unique_minimizer(axioms, concrete_var, [w1, w2], m)
-print(f"   {unique_bundle.proof_result.status.value}")
-
-# ─── Step 4: Compose into design evidence ───────────────────
-
-print("\n4. Compose into single certification bundle:")
-hypothesis = axioms.hypothesis(
-    "portfolio_formulation_certified",
+# Step 4: Compose into single certification
+hyp = axioms.hypothesis(
+    "portfolio_certified",
     expr=sympy.Gt(m, 0),
-    description="Markowitz formulation is strictly convex with unique optimum",
+    description="Convex + strictly convex + unique optimum",
 )
 script = (
-    ProofBuilder(
-        axioms, hypothesis.name,
-        name="portfolio_certification",
-        claim="Convex + strongly convex + unique minimizer",
-    )
+    ProofBuilder(axioms, hyp.name, name="cert", claim="portfolio certified")
     .import_bundle(hess_bundle)
     .import_bundle(unique_bundle)
-    .lemma(
-        "strict_convexity",
-        LemmaKind.QUERY,
-        expr=sympy.Q.positive(m),
-        description=f"Strong convexity parameter m = {m} > 0",
-    )
+    .lemma("m_positive", LemmaKind.QUERY, expr=sympy.Q.positive(m))
     .build()
 )
-bundle = seal(axioms, hypothesis, script)
-print(f"   {bundle.proof_result.status.value}")
-print(f"   Hash: {bundle.bundle_hash}")
+bundle = seal(axioms, hyp, script)
+print(f"\n4. Sealed certification: {bundle.bundle_hash[:32]}...")
+
+
+# ─── FAILURE CASE: perfectly correlated assets (rho = 1) ────
+#
+# When rho = 1, the covariance matrix is rank-1 (singular).
+# The objective is still convex (PSD) but NOT strictly convex —
+# the minimum is not unique (any portfolio on the efficient
+# frontier is equally optimal).
+#
+# The strong convexity proof should FAIL.
+
+print("\n" + "="*60)
+print("  Failure case: perfectly correlated assets (rho = 1)")
+print("="*60)
+
+portfolio_corr1 = (
+    w1**2 * sympy.Rational(1, 25)
+    + 2 * sympy.Rational(1, 5) * sympy.Rational(3, 10) * w1 * w2
+    + w2**2 * sympy.Rational(9, 100)
+)
+
+H_corr1 = sympy.hessian(portfolio_corr1, [w1, w2])
+det_corr1 = H_corr1.det()
+print(f"  Hessian: {H_corr1}")
+print(f"  det(Hessian) = {det_corr1}")
+
+# Convexity still holds (PSD — det >= 0)
+hess_corr1 = convex_hessian(axioms, portfolio_corr1, [w1, w2])
+print(f"\n  Convex? {hess_corr1.proof_result.status.value} (still PSD)")
+
+# But strong convexity FAILS (det = 0 means eigenvalue = 0)
+eigvals_corr1 = sorted(H_corr1.eigenvals().keys())
+m_corr1 = eigvals_corr1[0]
+print(f"  Min eigenvalue: {m_corr1}")
+
+try:
+    strong_corr1 = strongly_convex(
+        axioms, portfolio_corr1, [w1, w2], m_corr1,
+    )
+    print(f"  Strictly convex? {strong_corr1.proof_result.status.value}")
+except ValueError:
+    print("  Strictly convex? REJECTED (correctly)")
+    print("  → Multiple optimal portfolios exist")
+    print("  → Need additional constraints to select among them")
 
 print()
-print("This certifies: the Markowitz objective is strictly convex,")
-print("so any local minimum found by the solver IS the global minimum,")
-print("and the optimal portfolio weights are unique.")
-print()
-print("This does NOT certify: accuracy of sigma/rho estimates,")
-print("constraint feasibility, or out-of-sample performance.")
-print("Next: solve in CVXPY, backtest, sensitivity analysis.")
+print("Scaling note: symbolic Hessian works for 2-4 assets.")
+print("For 500-asset portfolios, use: np.linalg.eigvalsh(Sigma).min() > 0")
+print("symproof certifies the FORMULATION; numerical checks certify the DATA.")
