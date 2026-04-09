@@ -86,6 +86,8 @@ Rules:
 - Don't include things that need to be PROVEN as axioms
 - Separate compound constraints: `f > 0` and `f < 1`, not `And(f > 0, f < 1)`
 - Each axiom gets a descriptive name
+- If the proof will rely on an external theorem, add it as `Axiom(name="theorem_name", expr=sympy.S.true)` and document what theorem it represents. **Flag it for the proof constructor** — they will need to build or find a foundation proof, and the foundation's assumptions will become inherited axioms
+- Anticipate hidden axioms: when citing a theorem, ask "what does this theorem assume?" List those conditions in comments even if you're not sure they need to be axioms yet. The proof constructor will surface them via `seal(foundations=...)`
 
 ### Step 5: State each hypothesis independently
 

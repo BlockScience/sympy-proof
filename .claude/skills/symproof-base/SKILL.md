@@ -39,6 +39,7 @@ AxiomSet → axiom_set_hash
 3. Lemma assumptions don't contradict axioms
 4. Imported bundles share the same axiom set
 5. All lemmas pass verification (imports re-verified, no trust shortcut)
+6. Foundation coverage: when `foundations=` is provided, every axiom in each foundation's axiom set must exist in the downstream axiom set (hidden axiom enforcement)
 
 ## Verification strategies (LemmaKind)
 
@@ -94,6 +95,41 @@ unique = unique_minimizer(axioms, f, vars, m)  # internally imports strongly_con
 - `mul_down / mul_up / div_down / div_up` — directed rounding
 - `rounding_bias_lemma / rounding_gap_lemma / chain_error_bound` — error analysis
 - `phantom_overflow_check / no_phantom_overflow_check` — uint256 safety
+
+## Hidden axioms and foundation enforcement
+
+**The hidden axiom problem is a major cause of failures in applied mathematics.** When a proof cites an external theorem, it inherits that theorem's assumptions. If those assumptions are not explicitly declared and verified for the specific application, the proof has a soundness gap.
+
+Example: a convergence proof cites Flam's stochastic heavy ball theorem. Flam's theorem requires bounded stochastic gradients, a Lipschitz-continuous objective, and Robbins-Monro step sizes. If the downstream proof only declares "Flam's theorem holds" without carrying these conditions, it has three hidden axioms.
+
+### Detection via `seal(foundations=...)`
+
+```python
+foundation = make_convergence_bundle()  # proves theorem under its own axioms
+bundle = seal(axioms, hypothesis, script,
+              foundations=[(foundation, "convergence_theorem")])
+# ValueError if foundation.axiom_set has axioms missing from `axioms`
+```
+
+### Fixing: inherited axioms
+
+Add the foundation's conditions to the downstream axiom set with `inherited=True`:
+
+```python
+Axiom(name="bounded_gradient", expr=gamma > 0, inherited=True,
+      description="Required by convergence theorem foundation.")
+```
+
+`inherited=True` means: "this condition was not a design choice — the proof chain forced it." Both posited and inherited axioms are required for soundness, but the distinction traces provenance.
+
+### When to use foundations
+
+Use `seal(foundations=...)` whenever:
+- An axiom has `expr=sympy.S.true` and a separate proof backs it
+- You are building on an external theorem and want to surface its conditions
+- You want to ensure the full assumption chain is auditable
+
+See `symproof/library/examples/dip_routing/` for a complete worked example where foundation enforcement revealed 7 hidden axioms across 3 proof pairs.
 
 ## Known SymPy limitations
 

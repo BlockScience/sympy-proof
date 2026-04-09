@@ -48,10 +48,23 @@ AxiomSet.canonical_dict() → hash_axiom_set → axiom_set_hash
 ### Key Design Principles
 
 1. **No hypothesis without axioms** — Hypothesis always carries `axiom_set_hash`. Preferred construction: `axiom_set.hypothesis(...)`.
-2. **Deterministic identity** — `sympy.srepr()` for expressions, `json.dumps(sort_keys=True)` for dicts, SHA-256 for hashes.
-3. **Separation of concerns** — `verify_proof` checks mathematical validity only. Context binding enforced in `seal()`.
-4. **Compositional disproof** — Proving ~H under A, then composing into a Disproof of H.
-5. **All models frozen** — Pydantic frozen=True for all value objects.
+2. **No hidden axioms** — When a proof depends on an external theorem via `seal(foundations=...)`, every axiom in the foundation must appear in the downstream axiom set. Missing axioms are a hard error. Inherited axioms are marked `Axiom(inherited=True)`.
+3. **Deterministic identity** — `sympy.srepr()` for expressions, `json.dumps(sort_keys=True)` for dicts, SHA-256 for hashes.
+4. **Separation of concerns** — `verify_proof` checks mathematical validity only. Context binding and foundation coverage enforced in `seal()`.
+5. **Compositional disproof** — Proving ~H under A, then composing into a Disproof of H.
+6. **All models frozen** — Pydantic frozen=True for all value objects.
+
+### Foundation Enforcement
+
+When a proof axiomatises an external theorem (`expr=sympy.S.true`), the foundation proof that backs it may require additional assumptions. `seal()` enforces coverage:
+
+```python
+seal(axioms, hypothesis, script,
+     foundations=[(foundation_bundle, "theorem_name")])
+# Raises ValueError if foundation has axioms not in `axioms`
+```
+
+The `Axiom.inherited` field distinguishes posited axioms (design choices) from inherited axioms (conditions forced by the proof chain). Both affect the axiom set hash.
 
 ### Key Constraints
 

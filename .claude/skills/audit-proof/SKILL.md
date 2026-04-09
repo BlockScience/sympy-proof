@@ -98,10 +98,21 @@ The LaTeX view shows axioms, hypothesis, lemma chain with dependencies, and advi
 
 For each proof, check:
 
-**Axioms:**
+**Axioms (posited):**
 - Is each axiom actually true in the real system?
 - Are any axioms too strong (assuming more than needed)?
 - Are any missing (the proof holds in a wider space than intended)?
+
+**Axioms (inherited — `inherited=True`):**
+- Trace each inherited axiom back to its foundation proof
+- Does the foundation's condition actually hold for THIS system?
+- An inherited axiom means "the proof chain forced this condition" — it needs the same scrutiny as posited axioms, but the failure mode is different: the proof author may not have realized this condition exists
+
+**Hidden axiom check (HIGHEST PRIORITY):**
+- Does any axiom have `expr=True`? What external theorem does it represent?
+- If a foundation proof exists: does `seal(foundations=...)` pass? If not, what axioms are missing?
+- If no foundation exists: what are the theorem's implicit conditions? List them. Are they valid for this system?
+- Violation of hidden axioms — citing a theorem without checking its conditions — is the most common cause of "correct proof, wrong conclusion" failures in applied mathematics
 
 **Hypothesis:**
 - Does it match the stated requirement?

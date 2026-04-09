@@ -138,6 +138,8 @@ These are well-established results from convex analysis and probability
 theory.  The contribution of the computational proof chain is to make
 explicit exactly where these results enter and what they require.
 
+Further development of symproof domain libraries for topology, convex analysis and probability theory could allow us to extend these proof chains deeper to reveal a more fundamental axiom base.
+
 ## Approach
 
 Where a result is purely algebraic (Lemma 1), the proof is

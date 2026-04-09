@@ -56,6 +56,38 @@ The [satellite ADCS example](symproof/library/examples/control/04_composition.py
 
 These gaps are covered by the other two layers. symproof's proofs are **necessary but not sufficient** — they establish that the design is mathematically sound before simulation tests it under stress and code analysis verifies the implementation.
 
+### Hidden axioms: the silent failure mode
+
+There is a failure mode more subtle than wrong code or flawed specifications: **citing a theorem without accounting for its assumptions**.
+
+A controls engineer applies a stability theorem. The theorem requires Lipschitz continuity of the gradient. The engineer's system has discontinuities at saturation boundaries. The proof is correct; the application is not. A financial engineer uses a convergence result from stochastic optimization. The result requires bounded stochastic gradients. The engineer's model has heavy-tailed noise. The citation is valid; the conditions are violated.
+
+This is the **hidden axiom problem**: when you invoke a result, you inherit all of its assumptions. If those assumptions are not explicitly declared and validated for your specific setting, your proof has a soundness gap that no amount of algebraic verification will catch.
+
+Hidden axioms are a major source of failures in practice, especially among scientists and engineers who cite theorems without carefully interrogating their implicit conditions — or at minimum, confirming that those conditions are appropriate simplifications for their application. The theorem is correct. The axioms hold in the abstract. But the specific system violates a condition that was never checked because it was never surfaced.
+
+symproof addresses this with **foundation enforcement**: when a proof depends on an external theorem, `seal()` requires a foundation bundle that makes the theorem's assumptions explicit. Every assumption in the foundation must appear in the downstream proof's axiom set — either as a posited axiom (a modelling choice) or as an inherited axiom (a condition the proof chain forced). Missing assumptions are flagged as hidden axioms and `seal()` refuses to proceed.
+
+```python
+# This fails — foundation has axioms not declared in downstream
+bundle = seal(axioms, hypothesis, script,
+              foundations=[(convergence_proof, "convergence_theorem")])
+# ValueError: Foundation has axioms not present in axiom set:
+#   ['bounded_gradient', 'lipschitz_continuity']. These are hidden axioms.
+
+# Fix: declare the inherited axioms explicitly
+axioms = AxiomSet(name="system", axioms=(
+    Axiom(name="my_constraint", expr=x > 0),                          # posited
+    Axiom(name="convergence_theorem", expr=sympy.S.true),              # external
+    Axiom(name="bounded_gradient", expr=gamma > 0, inherited=True),    # inherited
+    Axiom(name="lipschitz_continuity", expr=L > 0, inherited=True),    # inherited
+))
+```
+
+The `inherited=True` flag is semantically meaningful: it distinguishes conditions the proof author chose from conditions the proof chain forced. Both are required for soundness, but inherited axioms trace back to a specific external result rather than a design decision. This makes the full assumption set visible and auditable.
+
+See the [DIP routing demonstration](symproof/library/examples/dip_routing/) for a worked example where this process revealed three hidden axioms in a published convergence proof.
+
 ### Why this matters
 
 An engineer designs a controller. A programmer implements it. But nobody proves the engineer's math actually has the stability properties the design review claims. A protocol economist writes a market mechanism. An auditor verifies the code. But nobody proves the economist's formulas actually preserve the invariants under adversarial conditions.
@@ -68,6 +100,8 @@ The goal: an open-source verification and validation stack where symbolic proofs
 
 - **Reproducible proofs** — Every proof is hashed. Share the hash as a receipt; anyone can re-verify.
 - **Composable** — Import sealed proofs as building blocks. Prove `A`, prove `B`, then import both into a proof of `C`.
+- **Hidden axiom detection** — When a proof depends on an external theorem, `seal(foundations=...)` enforces that all of the theorem's assumptions are declared. Missing assumptions are a hard error.
+- **Inherited vs. posited axioms** — `Axiom(inherited=True)` marks conditions that came from a foundation proof, not from the proof author. The full assumption provenance is traceable.
 - **Advisory system** — When verification passes through known SymPy limitations (domain-ignoring simplification, heuristic Q-system), the result flags it for human review.
 - **False-positive protection** — `seal()` rejects proofs where lemma assumptions contradict axioms. Axioms are authoritative.
 

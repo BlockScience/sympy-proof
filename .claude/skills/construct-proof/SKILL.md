@@ -94,6 +94,23 @@ script = (
 bundle = seal(axioms, hypothesis, script)
 ```
 
+**If the axiom set includes `expr=True` axioms backed by foundation proofs**, pass them to `seal()`:
+
+```python
+foundation = make_foundation_bundle()
+bundle = seal(axioms, hypothesis, script,
+              foundations=[(foundation, "theorem_name")])
+```
+
+This enforces that all of the foundation's axioms appear in your axiom set. If they don't, `seal()` names the hidden axioms. Add them with `inherited=True`:
+
+```python
+Axiom(name="missing_condition", expr=condition, inherited=True,
+      description="Required by theorem_name foundation.")
+```
+
+**Always check for hidden axioms when citing external results.** This is the most common soundness gap in applied proofs.
+
 ### Step 6: Report and visualize
 
 Print the traceability record, then render the proof visually so the engineer confirms the math and structure match their intent.
