@@ -134,7 +134,7 @@ class Hypothesis(BaseModel):
 
 
 class LemmaKind(StrEnum):
-    """The three verification strategies SymPy handles reliably."""
+    """The four verification strategies SymPy handles reliably."""
 
     EQUALITY = "equality"
     """``simplify(expr - expected) == 0`` or ``expr.doit() == expected``."""
@@ -144,6 +144,16 @@ class LemmaKind(StrEnum):
 
     QUERY = "query"
     """``sympy.ask(expr, assumption_context)`` is ``True``."""
+
+    COORDINATE_TRANSFORM = "coordinate_transform"
+    """Transform → prove in new coordinates → verify round-trip.
+
+    Requires ``transform`` (forward map) and ``inverse_transform`` (back map).
+    Verification:
+    1. Round-trip: ``inverse(forward(s)) == s`` for each transformed symbol.
+    2. Apply forward transform to ``expr``.
+    3. ``simplify(transformed_expr - expected) == 0`` in new coordinates.
+    """
 
 
 class Lemma(BaseModel):
@@ -159,6 +169,20 @@ class Lemma(BaseModel):
 
     assumptions: dict[str, dict] = {}
     """symbol_name -> SymPy assumption kwargs, e.g. ``{"x": {"positive": True}}``."""
+
+    transform: dict[str, SympyExpr] | None = None
+    """Forward coordinate map: old_symbol_name -> new_expr.
+
+    Required for ``COORDINATE_TRANSFORM`` lemmas.  E.g. for Cartesian→polar:
+    ``{"x_1": r*cos(theta), "x_2": r*sin(theta)}``.
+    """
+
+    inverse_transform: dict[str, SympyExpr] | None = None
+    """Inverse coordinate map: new_symbol_name -> old_expr.
+
+    Required for ``COORDINATE_TRANSFORM`` lemmas.  E.g. for polar→Cartesian:
+    ``{"r": sqrt(x_1**2 + x_2**2), "theta": atan2(x_2, x_1)}``.
+    """
 
     depends_on: list[str] = []
     """Names of prior lemmas whose results this lemma logically depends on."""
@@ -243,6 +267,16 @@ class ProofScript(BaseModel):
                         sympy.srepr(lem.expected) if lem.expected is not None else None
                     ),
                     "assumptions": lem.assumptions,
+                    "transform": (
+                        {k: sympy.srepr(v) for k, v in lem.transform.items()}
+                        if lem.transform is not None
+                        else None
+                    ),
+                    "inverse_transform": (
+                        {k: sympy.srepr(v) for k, v in lem.inverse_transform.items()}
+                        if lem.inverse_transform is not None
+                        else None
+                    ),
                     "depends_on": lem.depends_on,
                     "description": lem.description,
                 }
@@ -258,6 +292,8 @@ class ProofScript(BaseModel):
         """
         lemmas = []
         for ld in data["lemmas"]:
+            raw_transform = ld.get("transform")
+            raw_inverse = ld.get("inverse_transform")
             lemmas.append(
                 Lemma(
                     name=ld["name"],
@@ -269,6 +305,16 @@ class ProofScript(BaseModel):
                         else None
                     ),
                     assumptions=ld.get("assumptions", {}),
+                    transform=(
+                        {k: sympy.sympify(v) for k, v in raw_transform.items()}
+                        if raw_transform is not None
+                        else None
+                    ),
+                    inverse_transform=(
+                        {k: sympy.sympify(v) for k, v in raw_inverse.items()}
+                        if raw_inverse is not None
+                        else None
+                    ),
                     depends_on=ld.get("depends_on", []),
                     description=ld.get("description", ""),
                 )

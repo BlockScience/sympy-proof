@@ -112,6 +112,34 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
         if lemma.kind == LemmaKind.BOOLEAN:
             result = sympy.simplify(expr_with_assumptions)
             passed = result is sympy.true
+
+            if not passed and not isinstance(
+                expr_with_assumptions, sympy.assumptions.assume.AppliedPredicate
+            ):
+                # Fallback 1: refine() handles implications and relational
+                # reasoning that simplify() misses (e.g., transitivity of <=).
+                # Skip for AppliedPredicate (Q-system) — those belong in QUERY.
+                try:
+                    refined = sympy.refine(expr_with_assumptions)
+                    if refined is sympy.true:
+                        passed = True
+                        result = refined
+                except (TypeError, ValueError, RecursionError, AttributeError):
+                    pass
+
+            if not passed and isinstance(expr_with_assumptions, sympy.Implies):
+                # Fallback 2: proof by contradiction — Implies(P, Q) holds
+                # iff And(P, Not(Q)) is unsatisfiable.
+                try:
+                    ante = expr_with_assumptions.args[0]
+                    cons = expr_with_assumptions.args[1]
+                    negated = sympy.simplify(sympy.And(ante, sympy.Not(cons)))
+                    if negated is sympy.false:
+                        passed = True
+                        result = sympy.true
+                except (TypeError, ValueError, RecursionError, AttributeError):
+                    pass
+
             return LemmaResult(
                 lemma_name=lemma.name, passed=passed, actual_value=result
             )
@@ -124,6 +152,99 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                 lemma_name=lemma.name,
                 passed=passed,
                 actual_value=sympy.true if passed else sympy.false,
+            )
+
+        if lemma.kind == LemmaKind.COORDINATE_TRANSFORM:
+            if lemma.transform is None or lemma.inverse_transform is None:
+                return LemmaResult(
+                    lemma_name=lemma.name,
+                    passed=False,
+                    error="COORDINATE_TRANSFORM requires both 'transform' "
+                    "and 'inverse_transform'",
+                )
+            if lemma.expected is None:
+                return LemmaResult(
+                    lemma_name=lemma.name,
+                    passed=False,
+                    error="COORDINATE_TRANSFORM requires 'expected' to be set",
+                )
+
+            # Collect all free symbols from transform expressions so we
+            # match by *name*, respecting any SymPy assumptions already
+            # attached to the symbols the caller used.
+            all_fwd_syms = {}
+            for fwd_expr in lemma.transform.values():
+                for sym in fwd_expr.free_symbols:
+                    all_fwd_syms[sym.name] = sym
+            all_inv_syms = {}
+            for inv_expr in lemma.inverse_transform.values():
+                for sym in inv_expr.free_symbols:
+                    all_inv_syms[sym.name] = sym
+
+            # Build forward substitution: old_symbol → new_expr
+            forward_subs = {}
+            for name, fwd_expr in lemma.transform.items():
+                # Find the actual symbol (with assumptions) from expr or
+                # inverse_transform values; fall back to bare Symbol.
+                orig_sym = all_inv_syms.get(name) or sympy.Symbol(name)
+                forward_subs[orig_sym] = fwd_expr
+
+            # Build inverse substitution: new_symbol → old_expr
+            inverse_subs = {}
+            for name, inv_expr in lemma.inverse_transform.items():
+                new_sym = all_fwd_syms.get(name) or sympy.Symbol(name)
+                inverse_subs[new_sym] = inv_expr
+
+            # Step 1: verify round-trip  inverse(forward(s)) == s
+            for orig_name, fwd_expr in lemma.transform.items():
+                orig_sym = all_inv_syms.get(orig_name) or sympy.Symbol(orig_name)
+                composed = fwd_expr.subs(inverse_subs)
+                diff_rt = sympy.simplify(composed - orig_sym)
+                if diff_rt != sympy.Integer(0):
+                    # Fallback: trigsimp for polar/spherical round-trips
+                    diff_rt = sympy.trigsimp(composed - orig_sym)
+                if diff_rt != sympy.Integer(0):
+                    # Fallback: powsimp + radsimp for sqrt-based round-trips
+                    diff_rt = sympy.simplify(
+                        sympy.powsimp(composed, force=True) - orig_sym
+                    )
+                if diff_rt != sympy.Integer(0):
+                    return LemmaResult(
+                        lemma_name=lemma.name,
+                        passed=False,
+                        actual_value=diff_rt,
+                        error=f"Round-trip failed for {orig_name}: "
+                        f"inverse(forward({orig_name})) - {orig_name} "
+                        f"= {diff_rt}, not 0",
+                    )
+
+            # Step 2: apply forward transform to expr, simplify in new coords
+            transformed_expr = expr_with_assumptions.subs(forward_subs)
+            expected_with_assumptions = lemma.expected.subs(assumption_subs)
+            transformed_expected = expected_with_assumptions.subs(forward_subs)
+
+            diff = sympy.simplify(transformed_expr - transformed_expected)
+            if diff == sympy.Integer(0):
+                return LemmaResult(
+                    lemma_name=lemma.name,
+                    passed=True,
+                    actual_value=sympy.Integer(0),
+                )
+
+            # Fallback: trigsimp for polar/spherical transforms
+            diff = sympy.trigsimp(transformed_expr - transformed_expected)
+            if diff == sympy.Integer(0):
+                return LemmaResult(
+                    lemma_name=lemma.name,
+                    passed=True,
+                    actual_value=sympy.Integer(0),
+                )
+
+            return LemmaResult(
+                lemma_name=lemma.name,
+                passed=False,
+                actual_value=diff,
+                error=f"Transformed simplify(expr - expected) = {diff}, not 0",
             )
 
         return LemmaResult(  # pragma: no cover

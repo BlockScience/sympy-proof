@@ -33,6 +33,31 @@ def try_simplify(
             return True
         if result is sympy.false:
             return False
+
+        # Fallback 1: refine() handles relational reasoning that
+        # simplify() misses (e.g., transitivity of <=, strict => weak).
+        # Skip for AppliedPredicate (Q-system) — those belong in QUERY.
+        if not isinstance(expr, sympy.assumptions.assume.AppliedPredicate):
+            try:
+                refined = sympy.refine(expr)
+                if refined is sympy.true:
+                    return True
+                if refined is sympy.false:
+                    return False
+            except (TypeError, ValueError, RecursionError, AttributeError):
+                pass
+
+        # Fallback 2: for Implies, proof by contradiction —
+        # Implies(P, Q) holds iff And(P, Not(Q)) is unsatisfiable.
+        if isinstance(expr, sympy.Implies):
+            try:
+                ante, cons = expr.args[0], expr.args[1]
+                negated = sympy.simplify(sympy.And(ante, sympy.Not(cons)))
+                if negated is sympy.false:
+                    return True
+            except (TypeError, ValueError, RecursionError, AttributeError):
+                pass
+
         return None
     except (TypeError, ValueError, RecursionError, AttributeError):
         return None

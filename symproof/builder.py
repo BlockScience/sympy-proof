@@ -77,6 +77,8 @@ class ProofBuilder:
         assumptions: dict[str, dict] | None = None,
         depends_on: list[str] | None = None,
         description: str = "",
+        transform: dict[str, sympy.Basic] | None = None,
+        inverse_transform: dict[str, sympy.Basic] | None = None,
     ) -> ProofBuilder:
         """Add a lemma to the proof chain and return self for chaining."""
         self._lemmas.append(
@@ -88,6 +90,8 @@ class ProofBuilder:
                 assumptions=assumptions or {},
                 depends_on=depends_on or [],
                 description=description,
+                transform=transform,
+                inverse_transform=inverse_transform,
             )
         )
         return self
