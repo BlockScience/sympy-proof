@@ -1,25 +1,55 @@
-"""DeFi mechanism proofs — real-world numerical analysis tools.
+"""DeFi mechanism proofs — the symbolic mathematics leg.
 
-Addresses critical gaps between symbolic proofs and actual Solidity/EVM
-behavior that security auditors routinely find:
+This module proves **mathematical properties of DeFi formulas**.  It is
+one layer of a three-part verification architecture:
+
+    Symbolic (this module)
+        → proves the formula is correct
+    Numeric (simulation / fuzzing)
+        → proves the formula behaves under finite precision
+    Implementation (Certora / Halmos / manual audit)
+        → proves the Solidity code matches the formula
+
+What this module PROVES:
+
+- Rounding direction is correct per operation and **net-positive
+  across a pipeline** (the signed accumulation pattern)
+- Truncation error is bounded: at most 1 unit per floor/ceil
+- Intermediate products don't overflow uint256 (phantom overflow)
+- Cross-decimal token pairs require normalization
+- Fee-bearing swap output is positive
+- Constant-product invariant is nondecreasing with fees
+
+What this module does NOT prove (and what covers the gap):
+
+- Production Solidity matches these formulas → code audit / Certora
+- State transitions are atomic (reentrancy) → static analysis
+- Token transfers deliver expected amounts → integration tests
+- Fee parameters are governance-bounded → access control audit
+- Formulas are robust to MEV / sandwich attacks → simulation
+
+The sealed proof hashes from this module go into a requirements
+traceability matrix alongside simulation results and code findings.
+Any reviewer can re-run and get the identical hash — independent,
+reproducible evidence for the mathematical layer.
+
+Tools:
 
 **Rounding direction** — ``mul_down`` / ``mul_up`` / ``div_down`` / ``div_up``
-    and proofs that the rounding bias favors the correct party.
+    and proofs that rounding bias favors the correct party.
 
-**Compound rounding error** — ``chain_error_bound`` proves that N sequential
-    floor operations accumulate at most N units of rounding error.
+**Directional chain error** — ``directional_chain_error`` proves each
+    step's sign AND that the net error favors the protocol.  Built on
+    the core ``signed_sum_lemmas`` tactic.
 
-**Phantom overflow** — ``safe_mul_div`` models OpenZeppelin-style ``mulDiv``
-    that avoids intermediate overflow, with proofs of equivalence to the
-    naive formula when no overflow occurs.
+**Phantom overflow** — ``phantom_overflow_check`` / ``safe_mul_div``
+    detect when ``a * b`` exceeds uint256 before division.
 
-**Decimal-aware reserves** — ``DecimalAwarePool`` handles token pairs with
-    different decimal places (e.g., USDC/6 ↔ WETH/18).
+**Decimal-aware reserves** — ``DecimalAwarePool`` handles token pairs
+    with different decimal places (e.g., USDC/6 ↔ WETH/18).
 
-Existing proofs (unchanged):
-- ``fee_complement_positive`` — ``1 - fee > 0``
-- ``amm_output_positive`` — swap output is positive
-- ``amm_product_nondecreasing`` — product invariant grows with fees
+**AMM proof bundles** — ``fee_complement_positive``,
+    ``amm_output_positive``, ``amm_product_nondecreasing``.
 """
 
 from __future__ import annotations

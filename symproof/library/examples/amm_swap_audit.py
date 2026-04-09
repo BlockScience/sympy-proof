@@ -5,21 +5,38 @@ Run::
 
     uv run python -m symproof.library.examples.amm_swap_audit
 
-This walkthrough models the thought process of a security auditor
-reviewing a Uniswap-style constant-product AMM.  Each section is a
-question the auditor asks, followed by the proof that answers it.
+Scope
+-----
+This walkthrough proves **mathematical properties of AMM formulas**.
+It is the symbolic-math leg of a three-part verification architecture:
 
-The progression:
+    symproof (this)   → formula is correct
+    simulation        → formula behaves under finite precision
+    code audit        → Solidity matches the formula
+
+The sealed proof hashes go into a requirements traceability matrix
+alongside simulation and code findings.  Together they close the gap;
+alone, any one leg is necessary but not sufficient.
+
+What this covers:
     1. "Does the swap formula even produce a positive output?"
     2. "Which direction does the pool round — and does that matter?"
     3. "What's the maximum value the pool can extract per swap?"
     4. "Can the intermediate multiply overflow uint256?"
-    5. "If I chain 5 operations, how much rounding error accumulates?"
+    5. "If I chain 5 operations, does the net rounding error favor
+        the protocol — or does it leak value?"
     6. "This pool pairs USDC (6 dec) with WETH (18 dec) — is the
         price calculation correct?"
-    7. "Show me one bundle that proves this swap is safe."
+    7. "Show me one bundle that proves these properties together."
 
-Each answer is a sealed, hashed proof bundle.  The hashes are
+What this does NOT cover (and what does):
+    - Solidity code matches the formula → Certora / Halmos / manual audit
+    - Reentrancy / flash loan attacks → static analysis / Slither
+    - Fee governance bounds → access control audit
+    - Token transfer safety → integration tests
+    - MEV / sandwich resistance → simulation / mempool analysis
+
+Each answer below is a sealed, hashed proof bundle.  The hashes are
 deterministic — run it twice, get the same hashes.
 """
 
