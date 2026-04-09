@@ -386,6 +386,90 @@ def proof_dag_dot(
                 f'];'
             )
 
+    # Legend
+    lines.append('')
+    lines.append('  subgraph cluster_legend {')
+    lines.append('    label="Legend";')
+    lines.append('    labeljust=l;')
+    lines.append('    style=dashed;')
+    lines.append('    color="#bdc3c7";')
+    lines.append('    fontname="Helvetica";')
+    lines.append('    fontsize=10;')
+    lines.append('    node [fontsize=8, width=0.3, height=0.2];')
+    lines.append('')
+    lines.append('    // Node types')
+    lines.append(
+        '    _leg_bundle [shape=box3d, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'penwidth=2, label="Proof\\nBundle"];'
+    )
+    lines.append(
+        '    _leg_eq [shape=box, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'label="Equality"];'
+    )
+    lines.append(
+        '    _leg_bool [shape=diamond, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'label="Boolean"];'
+    )
+    lines.append(
+        '    _leg_query [shape=ellipse, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'label="Query"];'
+    )
+    lines.append(
+        '    _leg_coord [shape=hexagon, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'label="Coord\\nTransform"];'
+    )
+    lines.append(
+        '    _leg_fail [shape=box, style=filled, '
+        'fillcolor="#c0392b20", color="#c0392b", '
+        'label="Failed"];'
+    )
+    lines.append('')
+    lines.append('    // Edge types')
+    lines.append(
+        '    _leg_e1 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e2 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e1 -> _leg_e2 ['
+        'style=bold, color="#2c3e50", label="imports"];'
+    )
+    lines.append(
+        '    _leg_e3 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e4 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e3 -> _leg_e4 ['
+        'style=dashed, color="#7f8c8d", label="depends_on"];'
+    )
+    lines.append(
+        '    _leg_e5 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e6 [shape=point, width=0];'
+    )
+    lines.append(
+        '    _leg_e5 -> _leg_e6 ['
+        'style=dotted, color="#bdc3c7", '
+        'arrowhead=none, label="contains"];'
+    )
+    lines.append('')
+    lines.append('    // Advisory marker')
+    lines.append(
+        '    _leg_adv [shape=ellipse, style=filled, '
+        'fillcolor="#2d7d4620", color="#2d7d46", '
+        'label="name\\n⚠ = advisory"];'
+    )
+    lines.append('  }')
+
     lines.append('}')
     return '\n'.join(lines)
 
