@@ -14,6 +14,7 @@ from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof, hash_pr
 from symproof.models import (
     Axiom,
     AxiomSet,
+    Citation,
     Disproof,
     Hypothesis,
     Lemma,
@@ -38,6 +39,7 @@ from symproof.verification import verify_lemma, verify_proof
 __all__ = [
     "Axiom",
     "AxiomSet",
+    "Citation",
     "CompositeType",
     "ContradictionError",
     "Disproof",

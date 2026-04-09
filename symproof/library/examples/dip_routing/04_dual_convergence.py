@@ -40,7 +40,7 @@ import importlib
 
 import sympy
 
-from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+from symproof import Axiom, AxiomSet, Citation, LemmaKind, ProofBuilder, seal
 
 _mod_07 = importlib.import_module(
     "symproof.library.examples.dip_routing.07_flam_convergence"
@@ -89,6 +89,7 @@ axioms = AxiomSet(
             name="lyapunov_nonneg",
             expr=V_t >= 0,
             inherited=True,
+            citation=Citation(source="Flam 2004, Optimization under uncertainty using momentum"),
             description=(
                 "Optimality gap V_t = h(lambda*) - h(lambda_t) >= 0. "
                 "Required by Flam's convergence argument."
@@ -98,6 +99,7 @@ axioms = AxiomSet(
             name="concavity_descent",
             expr=sympy.S.true,
             inherited=True,
+            citation=Citation(source="Standard result; see Boyd & Vandenberghe, Convex Optimization, 2004"),
             description=(
                 "For concave h with Lipschitz gradient, one stochastic step "
                 "satisfies E[V_{t+1}] <= V_t - eps*||grad||^2 + eps^2*gamma^2. "
@@ -108,6 +110,7 @@ axioms = AxiomSet(
             name="robbins_siegmund",
             expr=sympy.S.true,
             inherited=True,
+            citation=Citation(source="Robbins & Siegmund 1971, A convergence theorem for nonnegative almost supermartingales"),
             description=(
                 "Robbins-Siegmund: nonneg stochastic process with summable "
                 "negative drift converges a.s. "

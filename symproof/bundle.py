@@ -16,6 +16,7 @@ from symproof.models import (
     Disproof,
     Hypothesis,
     ProofBundle,
+    ProofResult,
     ProofScript,
     ProofStatus,
 )
@@ -112,16 +113,74 @@ def _check_foundations(
             )
 
 
+def _check_axiom_consistency(axiom_set: AxiomSet) -> None:
+    """Check that no pair of axioms contradicts each other.
+
+    Raises ``ValueError`` if ``simplify(And(a1.expr, a2.expr))`` is
+    ``sympy.false``.  Skips axioms whose expression is ``sympy.S.true``
+    (external results cannot be checked pairwise).
+    """
+    checkable = [a for a in axiom_set.axioms if a.expr is not sympy.S.true]
+    for i, a1 in enumerate(checkable):
+        for a2 in checkable[i + 1 :]:
+            try:
+                combined = sympy.simplify(sympy.And(a1.expr, a2.expr))
+                if combined is sympy.S.false:
+                    raise ValueError(
+                        f"Axioms '{a1.name}' and '{a2.name}' are mutually "
+                        f"contradictory: And({a1.expr}, {a2.expr}) is provably "
+                        f"False. The axiom set is inconsistent."
+                    )
+            except (TypeError, RecursionError, AttributeError):
+                continue
+
+
+def _build_assumption_report(axiom_set: AxiomSet) -> tuple[str, ...]:
+    """Build advisories enumerating all assumptions in the axiom set."""
+    report: list[str] = []
+    posited = [a for a in axiom_set.axioms if not a.inherited]
+    inherited = [a for a in axiom_set.axioms if a.inherited]
+    external = [a for a in axiom_set.axioms if a.expr is sympy.S.true]
+
+    report.append(
+        f"[ASSUMPTIONS] Axiom set '{axiom_set.name}' entails "
+        f"{len(axiom_set.axioms)} assumptions: "
+        f"{len(posited)} posited, {len(inherited)} inherited, "
+        f"{len(external)} external (expr=True)."
+    )
+
+    for a in inherited:
+        cite = f" (from: {a.citation.source})" if a.citation else ""
+        if a.expr is sympy.S.true:
+            report.append(
+                f"[ASSUMPTIONS] INHERITED (external): '{a.name}'{cite}"
+            )
+        else:
+            report.append(
+                f"[ASSUMPTIONS] INHERITED: '{a.name}' assumes {a.expr}{cite}"
+            )
+
+    for a in external:
+        if not a.inherited:
+            report.append(
+                f"[ASSUMPTIONS] EXTERNAL: '{a.name}' taken as given "
+                f"(expr=True). Consider backing with a foundation."
+            )
+
+    return tuple(report)
+
+
 def seal(
     axiom_set: AxiomSet,
     hypothesis: Hypothesis,
     script: ProofScript,
     *,
     foundations: Sequence[tuple[ProofBundle, str]] | None = None,
+    check_consistency: bool = True,
 ) -> ProofBundle:
     """Verify a proof script and seal it into a ``ProofBundle``.
 
-    Enforces four preconditions:
+    Enforces five preconditions:
 
     1. ``script.axiom_set_hash`` matches the actual axiom set hash.
     2. ``script.target`` matches the hypothesis name.
@@ -193,6 +252,10 @@ def seal(
     if foundations:
         _check_foundations(axiom_set, foundations)
 
+    # Pairwise consistency: reject contradictory axiom pairs.
+    if check_consistency:
+        _check_axiom_consistency(axiom_set)
+
     # Always re-verify — no trust_imports shortcut when sealing.
     result = verify_proof(script, trust_imports=False)
     if result.status != ProofStatus.VERIFIED:
@@ -201,13 +264,23 @@ def seal(
             f"Cannot seal an unverified proof. Summary: {result.failure_summary}"
         )
 
-    bundle_h = hash_bundle(actual_hash, hypothesis, result.proof_hash)  # type: ignore[arg-type]
+    # Build assumption report and prepend to advisories.
+    assumption_advisories = _build_assumption_report(axiom_set)
+    augmented_result = ProofResult(
+        status=result.status,
+        proof_hash=result.proof_hash,
+        lemma_results=result.lemma_results,
+        failure_summary=result.failure_summary,
+        advisories=assumption_advisories + result.advisories,
+    )
+
+    bundle_h = hash_bundle(actual_hash, hypothesis, augmented_result.proof_hash)  # type: ignore[arg-type]
 
     return ProofBundle(
         axiom_set=axiom_set,
         hypothesis=hypothesis,
         proof=script,
-        proof_result=result,
+        proof_result=augmented_result,
         bundle_hash=bundle_h,
     )
 

@@ -46,7 +46,7 @@ import importlib
 
 import sympy
 
-from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+from symproof import Axiom, AxiomSet, Citation, LemmaKind, ProofBuilder, seal
 
 _mod_06 = importlib.import_module(
     "symproof.library.examples.dip_routing.06_danskin_concrete"
@@ -114,6 +114,7 @@ axioms = AxiomSet(
             name="maximiser_exists",
             expr=sympy.S.true,
             inherited=True,
+            citation=Citation(source="Danskin's theorem; Bertsekas, Nonlinear Programming, 1999"),
             description=(
                 "The maximiser r*(lambda) exists on the compact feasible "
                 "set [0, C_max]. Topological assumption from Danskin proof."

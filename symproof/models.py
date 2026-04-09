@@ -19,6 +19,29 @@ from symproof.serialization import make_canonical_dict
 from symproof.types import SympyBoolean, SympyExpr  # noqa: TC001
 
 # ---------------------------------------------------------------------------
+# Citation
+# ---------------------------------------------------------------------------
+
+
+class Citation(BaseModel):
+    """Provenance record for an axiom.
+
+    At minimum, ``source`` is a human-readable reference (paper, theorem,
+    or attestation).  Optionally, ``bundle_hash`` links to a sealed
+    ``ProofBundle`` that computationally backs the axiom.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str
+    """Human-readable provenance, e.g. 'Flam 2004, Theorem 2'."""
+
+    bundle_hash: str = ""
+    """Optional SHA-256 hash of the source ProofBundle.  Empty string
+    means not linked to a specific bundle (yet)."""
+
+
+# ---------------------------------------------------------------------------
 # Axiom
 # ---------------------------------------------------------------------------
 
@@ -36,6 +59,20 @@ class Axiom(BaseModel):
     than posited directly.  Inherited axioms represent conditions that
     the proof chain forced — they were not chosen by the proof author
     but are required by an external theorem the proof depends on."""
+
+    citation: Citation | None = None
+    """Provenance for this axiom.  Required when ``inherited=True``."""
+
+    @model_validator(mode="after")
+    def _inherited_requires_citation(self) -> Self:
+        if self.inherited and self.citation is None:
+            raise ValueError(
+                f"Axiom '{self.name}' is marked inherited=True but has no "
+                f"citation. Inherited axioms must declare provenance via "
+                f"citation=Citation(source='...'). This ensures the full "
+                f"assumption chain is traceable."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -63,22 +100,60 @@ class AxiomSet(BaseModel):
             raise ValueError(f"Duplicate axiom names in AxiomSet: {dupes}")
         return self
 
+    @model_validator(mode="after")
+    def _no_false_axioms(self) -> Self:
+        """Reject axioms whose expressions are provably false.
+
+        Best-effort: only catches cases where ``sympy.simplify`` returns
+        ``sympy.false``.  Complex contradictions may slip through and are
+        caught later by the pairwise consistency check in ``seal()``.
+        """
+        for axiom in self.axioms:
+            if axiom.expr is sympy.S.true:
+                continue  # external results — cannot check
+            try:
+                simplified = sympy.simplify(axiom.expr)
+                if simplified is sympy.S.false:
+                    raise ValueError(
+                        f"Axiom '{axiom.name}' is provably false: "
+                        f"simplify({axiom.expr}) returned False. "
+                        f"A false axiom corrupts all downstream proofs."
+                    )
+            except (TypeError, RecursionError, AttributeError):
+                continue  # cannot determine — let it pass
+        return self
+
     def canonical_dict(self) -> dict:
         """Sorted, srepr'd canonical form for hashing."""
         return make_canonical_dict(
             {
                 "name": self.name,
                 "axioms": [
-                    {
-                        "name": a.name,
-                        "expr": a.expr,
-                        "description": a.description,
-                        "inherited": a.inherited,
-                    }
+                    self._axiom_to_canonical(a)
                     for a in self.axioms
                 ],
             }
         )
+
+    @staticmethod
+    def _axiom_to_canonical(a: Axiom) -> dict:
+        """Convert an axiom to its canonical dict form.
+
+        Only includes ``citation`` when non-None to preserve backward
+        hash compatibility with axiom sets created before citations existed.
+        """
+        d: dict = {
+            "name": a.name,
+            "expr": a.expr,
+            "description": a.description,
+            "inherited": a.inherited,
+        }
+        if a.citation is not None:
+            d["citation"] = {
+                "source": a.citation.source,
+                "bundle_hash": a.citation.bundle_hash,
+            }
+        return d
 
     def true_axioms(self) -> tuple[Axiom, ...]:
         """Return axioms whose expression is ``sympy.S.true`` (external results)."""
@@ -402,11 +477,7 @@ class ProofBundle(BaseModel):
             "axiom_set": {
                 "name": self.axiom_set.name,
                 "axioms": [
-                    {
-                        "name": a.name,
-                        "expr": sympy.srepr(a.expr),
-                        "description": a.description,
-                    }
+                    self._axiom_to_evidence(a)
                     for a in self.axiom_set.axioms
                 ],
             },
@@ -424,6 +495,40 @@ class ProofBundle(BaseModel):
             "bundle_hash": self.bundle_hash,
         }
 
+    @staticmethod
+    def _axiom_to_evidence(a: Axiom) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "name": a.name,
+            "expr": sympy.srepr(a.expr),
+            "description": a.description,
+            "inherited": a.inherited,
+        }
+        if a.citation is not None:
+            d["citation"] = {
+                "source": a.citation.source,
+                "bundle_hash": a.citation.bundle_hash,
+            }
+        return d
+
+    @staticmethod
+    def _axiom_from_evidence(a: dict[str, Any]) -> Axiom:
+        cite_data = a.get("citation")
+        citation = (
+            Citation(
+                source=cite_data["source"],
+                bundle_hash=cite_data.get("bundle_hash", ""),
+            )
+            if cite_data is not None
+            else None
+        )
+        return Axiom(
+            name=a["name"],
+            expr=sympy.sympify(a["expr"]),
+            description=a.get("description", ""),
+            inherited=a.get("inherited", False),
+            citation=citation,
+        )
+
     @classmethod
     def from_evidence(cls, data: dict[str, Any]) -> ProofBundle:
         """Restore a ``ProofBundle`` from an evidence dict."""
@@ -431,11 +536,7 @@ class ProofBundle(BaseModel):
         axiom_set = AxiomSet(
             name=ax_data["name"],
             axioms=tuple(
-                Axiom(
-                    name=a["name"],
-                    expr=sympy.sympify(a["expr"]),
-                    description=a.get("description", ""),
-                )
+                cls._axiom_from_evidence(a)
                 for a in ax_data["axioms"]
             ),
         )

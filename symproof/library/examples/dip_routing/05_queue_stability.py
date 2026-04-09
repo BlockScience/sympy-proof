@@ -45,7 +45,7 @@ import importlib
 
 import sympy
 
-from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
+from symproof import Axiom, AxiomSet, Citation, LemmaKind, ProofBuilder, seal
 
 _mod_08 = importlib.import_module(
     "symproof.library.examples.dip_routing.08_supermartingale_finite"
@@ -111,12 +111,14 @@ axioms = AxiomSet(
             name="process_nonneg",
             expr=Y_0 >= 0,
             inherited=True,
+            citation=Citation(source="Solo & Kong 1995, Adaptive Signal Processing Algorithms, Thm E.7.4"),
             description="The process Y_t is nonnegative. Required by Solo-Kong.",
         ),
         Axiom(
             name="descent_per_step",
             expr=delta > 0,
             inherited=True,
+            citation=Citation(source="Solo & Kong 1995, Adaptive Signal Processing Algorithms, Thm E.7.4"),
             description=(
                 "Each step decreases the process by at least delta > 0. "
                 "Required by Solo-Kong."
@@ -126,6 +128,7 @@ axioms = AxiomSet(
             name="borel_cantelli_extension",
             expr=sympy.S.true,
             inherited=True,
+            citation=Citation(source="Borel-Cantelli lemma; see Billingsley, Probability and Measure, 1995"),
             description=(
                 "Borel-Cantelli: finite-time return from any starting point "
                 "implies lim inf = 0 a.s. Required by Solo-Kong."

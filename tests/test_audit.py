@@ -8,11 +8,14 @@ import sympy
 from symproof import (
     Axiom,
     AxiomSet,
+    Citation,
     LemmaKind,
     ProofBuilder,
     ProofStatus,
     seal,
 )
+
+_TEST_CITE = Citation(source="test fixture")
 
 
 # ---------------------------------------------------------------------------
@@ -40,15 +43,22 @@ class TestInherited:
         assert a.inherited is False
 
     def test_explicit_inherited(self):
-        a = Axiom(name="a", expr=sympy.S.true, inherited=True)
+        a = Axiom(name="a", expr=sympy.S.true, inherited=True,
+                  citation=_TEST_CITE)
         assert a.inherited is True
+
+    def test_inherited_requires_citation(self):
+        import pytest
+        with pytest.raises(Exception, match="citation"):
+            Axiom(name="a", expr=sympy.S.true, inherited=True)
 
     def test_inherited_in_canonical_dict(self):
         ax1 = AxiomSet(name="s", axioms=(
             Axiom(name="a", expr=sympy.S.true),
         ))
         ax2 = AxiomSet(name="s", axioms=(
-            Axiom(name="a", expr=sympy.S.true, inherited=True),
+            Axiom(name="a", expr=sympy.S.true, inherited=True,
+                  citation=_TEST_CITE),
         ))
         # Different inherited values → different hashes
         assert ax1.axiom_set_hash != ax2.axiom_set_hash
@@ -57,8 +67,10 @@ class TestInherited:
         """Proofs verify the same regardless of inherited flag."""
         x = sympy.Symbol("x", positive=True)
         for inherited in (False, True):
+            citation = _TEST_CITE if inherited else None
             ax = AxiomSet(name="s", axioms=(
-                Axiom(name="x_pos", expr=x > 0, inherited=inherited),
+                Axiom(name="x_pos", expr=x > 0, inherited=inherited,
+                      citation=citation),
             ))
             h = ax.hypothesis("h", expr=x > 0)
             script = (
@@ -150,7 +162,8 @@ class TestFoundationEnforcement:
         downstream_ax = AxiomSet(name="downstream", axioms=(
             Axiom(name="gradient_bounded", expr=gamma > 0),
             Axiom(name="flam_theorem", expr=sympy.S.true),
-            Axiom(name="lyapunov_nonneg", expr=v >= 0, inherited=True),
+            Axiom(name="lyapunov_nonneg", expr=v >= 0, inherited=True,
+                  citation=_TEST_CITE),
         ))
 
         foundation_ax = AxiomSet(name="foundation", axioms=(
@@ -218,7 +231,8 @@ class TestFoundationEnforcement:
         downstream_ax = AxiomSet(name="downstream", axioms=(
             Axiom(name="bound", expr=g > 0),
             Axiom(name="theorem_a", expr=sympy.S.true),
-            Axiom(name="nonneg", expr=v >= 0, inherited=True),
+            Axiom(name="nonneg", expr=v >= 0, inherited=True,
+                  citation=_TEST_CITE),
             Axiom(name="theorem_b", expr=sympy.S.true),
         ))
 
