@@ -1,151 +1,150 @@
 ---
 name: audit-proof
-description: Audit a sealed proof bundle — verify correctness, interrogate assumptions, find gaps. Use when reviewing proofs for soundness and completeness.
+description: Audit proof bundles — verify correctness, assess coverage, find gaps. Use when reviewing proofs for a system's requirements.
 ---
 
-# Audit a proof
+# Audit proofs
 
-You are helping a **reviewer** who has received a sealed `ProofBundle` and needs to determine whether the proof is sound, complete, and honest about its limitations.
+You are helping a **reviewer** who has received one or more sealed `ProofBundle` objects and needs to determine whether the proof collection is sound, complete, and honest about its limitations.
 
-**Your job is adversarial. You are looking for reasons the proof might be wrong, incomplete, or misleading — not confirming it's correct.**
+**Your job is adversarial. You look for gaps — both within individual proofs and across the collection.**
+
+## Two levels of audit
+
+### Level 1: Individual proof soundness
+Is THIS proof correct? Are the axioms true? Are the advisories addressed?
+
+### Level 2: Collective coverage
+Does the COLLECTION of proofs cover all the properties the system needs? What's missing? What falls in the gap between symbolic proof and real-world behavior?
+
+Level 2 is where most failures live. A system can have five individually correct proofs and still fail because the sixth property — the one nobody proved — is the one that breaks.
 
 ## Argument
 
-The proof bundle, file, or claim to audit: $ARGUMENTS
+The proof bundle(s), file(s), or system to audit: $ARGUMENTS
 
 ## Workflow
 
-### Step 1: Load and re-verify
+### Step 1: Enumerate what needs to be true
+
+Before looking at any proofs, ask: **what properties does this system need?**
+
+For a control system:
+- Stability (open-loop and closed-loop)
+- Controllability
+- Observability
+- Performance bounds (settling time, overshoot, steady-state error)
+- Robustness (gain margin, phase margin, parameter sensitivity)
+
+For a DeFi mechanism:
+- Invariant preservation
+- Rounding direction correctness
+- Overflow safety
+- Fee/slippage bounds
+- Economic incentive alignment
+
+For an optimization problem:
+- Convexity of objective
+- Feasibility of constraints
+- Uniqueness of solution
+- Conditioning (strong convexity parameter)
+
+**Write this list first.** Then check which items have proofs and which don't.
+
+### Step 2: Map proofs to requirements
+
+```
+Property needed        | Proof exists? | Bundle hash         | Status
+-----------------------|---------------|---------------------|--------
+Closed-loop stability  | YES           | a3f2...             | VERIFIED
+Controllability        | YES           | 7c51...             | VERIFIED
+Observability          | YES           | fc89...             | VERIFIED
+Pointing error < 0.1°  | NO            | —                   | UNPROVEN
+Robustness to ±20% J   | NO (not symbolic) | —              | NEEDS SIM
+Discrete-time stability | NO            | —                   | UNPROVEN
+```
+
+Gaps are more important than passes. Flag every UNPROVEN and NEEDS SIM entry.
+
+### Step 3: Audit each proof individually
+
+For each sealed bundle, re-verify and interrogate:
 
 ```python
-from symproof import verify_proof
-
-# Re-verify from scratch (never trust the stored status)
 result = verify_proof(bundle.proof, trust_imports=False)
-assert result.status.value == "VERIFIED", f"FAILED: {result.failure_summary}"
+assert result.status.value == "VERIFIED"
 ```
 
-If re-verification fails, stop. The proof is broken.
+For each proof, check:
 
-### Step 2: Examine the axiom set
+**Axioms:**
+- Is each axiom actually true in the real system?
+- Are any axioms too strong (assuming more than needed)?
+- Are any missing (the proof holds in a wider space than intended)?
 
-For EACH axiom, ask:
-- **Is this actually true in the system being modeled?** An axiom that says `fee > 0` is only valid if the protocol enforces positive fees.
-- **Is this too strong?** Does the axiom assume more than necessary? (e.g., `x > 0` when `x >= 0` would suffice)
-- **Is this too weak?** Are there constraints the framer forgot? Missing axioms mean the proof holds in a larger space than intended.
-- **Are there implicit assumptions?** SymPy symbol assumptions (positive=True on the Symbol itself) are separate from Axiom expressions. Check both.
+**Hypothesis:**
+- Does it match the stated requirement?
+- Is the SymPy expression correct?
 
-```python
-print("Axiom set:", bundle.axiom_set.name)
-for ax in bundle.axiom_set.axioms:
-    print(f"  {ax.name}: {ax.expr}")
-```
+**Lemma chain:**
+- What advisories exist? Each is a review item.
+- Are dependencies (`depends_on`, `import_bundle`) logically correct?
 
-### Step 3: Examine the hypothesis
+**False-positive vectors:**
+- Domain-ignoring simplification (rational expressions with singularities)
+- Vacuous truth (implication P→Q is trivially true when P is never satisfied)
+- Symbolic vs numeric divergence (symbolic proof doesn't guarantee floating-point behavior)
 
-- **Does the hypothesis match what the stakeholder actually needs?** A proof that "dy > 0" doesn't prove "dy >= minimum_viable_output".
-- **Is the hypothesis expression correct?** Verify the SymPy expression matches the mathematical statement in the documentation.
-- **What does this hypothesis NOT cover?** List explicitly.
+### Step 4: Assess the collection
 
-### Step 4: Walk through each lemma
+This is the critical step. Ask:
 
-For EACH lemma in the proof chain:
+**Coverage:** What percentage of needed properties have proofs? 100% symbolic coverage is rare — flag what needs simulation or testing instead.
 
-```python
-for lr in bundle.proof_result.lemma_results:
-    print(f"[{lr.lemma_name}] passed={lr.passed}")
-    if lr.advisories:
-        for adv in lr.advisories:
-            print(f"  ADVISORY: {adv}")
-```
+**Independence:** Are the proofs genuinely independent, or do they share hidden assumptions? Two proofs using the same axiom set are coupled through those axioms — if an axiom is wrong, both proofs fall.
 
-For each lemma, ask:
-- **What verification strategy was used?** (EQUALITY / BOOLEAN / QUERY / COORDINATE_TRANSFORM)
-- **Are there advisories?** Each advisory is a flag for human review:
-  - "domain" advisory → check for division-by-zero or branch-cut issues
-  - "doit" advisory → verify the closed-form evaluation is correct
-  - "refine" / "negation" advisory → the proof used a fallback; is the fallback sound here?
-  - "QUERY" advisory → Q-system uses heuristics; is the assumption context complete?
-  - "INDETERMINATE" → SymPy couldn't determine truth; the proof has a gap
-- **Does `depends_on` reflect actual logical dependence?** Or are dependencies missing?
+**Layer completeness:** symproof covers symbolic analysis only. For each proven property, ask:
+- Does it also need simulation? (robustness, noise, finite precision)
+- Does it also need code verification? (implementation correctness)
+- Does it also need testing? (integration, hardware-in-the-loop)
 
-### Step 5: Check for false-positive vectors
+**Consistency:** If multiple proofs share an axiom set, run `check_consistency` on any bundles that prove related claims. Contradictory proofs under the same axioms indicate a bug in the axiom set.
 
-Known ways a proof can be technically VERIFIED but misleading:
-
-1. **Domain-ignoring simplification**: `simplify((x²-1)/(x-1))` returns `x+1`, ignoring the singularity at `x=1`. If the proof involves rational expressions, check whether domain restrictions matter.
-
-2. **Assumption override**: Lemma assumptions like `{"x": {"positive": True}}` are checked against axioms by `seal()`, but verify the CHECK actually caught all conflicts.
-
-3. **Vacuous truth**: An `Implies(P, Q)` is true when P is false. If the antecedent is never satisfied in the real system, the implication proves nothing useful.
-
-4. **Symbolic vs numeric**: A proof that `f(x) >= 0` symbolically doesn't mean `f(0.0001)` won't underflow to negative in floating-point.
-
-### Step 6: Attempt the negation
-
-Try to prove the OPPOSITE of the hypothesis. If you can, the axiom set is inconsistent.
-
-```python
-from symproof import disprove
-
-h_neg = bundle.hypothesis.negate()
-# Try to construct a proof of ~H under the same axioms
-# If seal() succeeds for both H and ~H → contradiction in axioms
-```
-
-Even if you can't prove ~H, check whether specific parameter values violate the hypothesis:
-```python
-# Numeric spot-check: does the claim hold for edge cases?
-expr = bundle.hypothesis.expr
-print(expr.subs({x: 0}))       # boundary
-print(expr.subs({x: 1e-10}))   # near-zero
-print(expr.subs({x: 1e10}))    # large
-```
-
-### Step 7: Assess completeness
-
-Ask:
-- **What properties does the system need that this proof DOESN'T cover?**
-- **What parameters are symbolic that should have concrete bounds?**
-- **What failure modes of the real system are not modeled?**
-  - For control: actuator saturation, sensor noise, discretization
-  - For DeFi: reentrancy, oracle manipulation, gas limits
-  - For optimization: numerical conditioning, constraint feasibility
-
-### Step 8: Write the audit report
-
-Structure:
+### Step 5: Write the audit report
 
 ```
-## Audit report: <proof name>
+## Audit report: <system name>
 
-### Verdict: PASS / PASS WITH ADVISORIES / FAIL
+### Coverage summary
+- Properties needed: N
+- Symbolically proven: M (with hashes)
+- Unproven (needs proof): K
+- Out of scope for symbolic analysis (needs sim/test): L
 
-### Axiom review
-- <axiom>: <assessment>
+### Requirements traceability
+| Requirement | Property | Proof hash | Verdict |
+|---|---|---|---|
+| REQ-STAB | Closed-loop stability | a3f2... | PASS |
+| REQ-CTRL | Controllability | 7c51... | PASS WITH 1 ADVISORY |
+| REQ-PERF | Pointing error | — | NO PROOF |
+| REQ-ROB  | Robustness | — | NEEDS SIMULATION |
 
-### Hypothesis review
-- Matches stated claim: yes/no
-- Scope gaps: <what's not covered>
+### Individual proof assessments
+(per-proof details: axiom review, advisory review, false-positive risk)
 
-### Lemma chain review
-- <lemma>: <strategy> — <assessment>
-- Advisories requiring attention: <list>
-
-### False-positive risk: LOW / MEDIUM / HIGH
-- <specific risks identified>
-
-### Completeness gaps
-- <what should be proven next>
+### Collection-level findings
+- Axiom consistency: <assessment>
+- Coverage gaps: <what's missing>
+- Layer gaps: <what needs sim/test beyond symbolic proof>
 
 ### Recommendation
-- <accept / accept with caveats / reject with reason>
+- Accept / Accept with caveats / Reject
+- Specific actions needed before sign-off
 ```
 
 ## What you do NOT do
 
-- Do NOT assume the proof is correct because it says VERIFIED
-- Do NOT skip advisories — every advisory is a review item
-- Do NOT accept vacuous truths without flagging them
-- Do NOT confuse "SymPy can prove it" with "it's true" — SymPy has known false-positive vectors
-- Do NOT sign off without checking the axiom set against the real system
+- Do NOT assume a proof is correct because it says VERIFIED
+- Do NOT assess individual proofs without first enumerating what needs to be true
+- Do NOT sign off on "symbolic coverage" as "full coverage" — flag what needs simulation and testing
+- Do NOT skip the collection-level assessment — individual correctness doesn't imply system correctness

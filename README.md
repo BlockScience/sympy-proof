@@ -115,6 +115,7 @@ Graduated examples in [`examples/`](examples/), each self-contained and runnable
 | [`03_multi_lemma_proof.py`](examples/03_multi_lemma_proof.py) | Decomposing AM-GM into a chain of lemmas |
 | [`04_using_the_library.py`](examples/04_using_the_library.py) | Importing pre-built proofs, composition |
 | [`05_control_engineering.py`](examples/05_control_engineering.py) | Plant + controller stability, Lyapunov construction |
+| [`06_latex_export.py`](examples/06_latex_export.py) | LaTeX views of proofs — pipe to file for compilable .tex |
 
 Run any example:
 
