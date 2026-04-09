@@ -32,6 +32,16 @@ from symproof.library.control import (
     observability_rank,
     quadratic_invariant,
 )
+from symproof.library.convex import (
+    conjugate_function,
+    convex_composition,
+    convex_hessian,
+    convex_scalar,
+    convex_sum,
+    gp_to_convex,
+    strongly_convex,
+    unique_minimizer,
+)
 from symproof.library.core import max_ge_first, piecewise_collapse
 from symproof.library.defi import (
     DecimalAwarePool,
@@ -61,12 +71,18 @@ __all__ = [
     "amm_product_nondecreasing",
     "chain_error_bound",
     "closed_loop_stability",
+    "conjugate_function",
     "controllability_rank",
+    "convex_composition",
+    "convex_hessian",
+    "convex_scalar",
+    "convex_sum",
     "directional_chain_error",
     "div_down",
     "div_up",
     "fee_complement_positive",
     "gain_margin",
+    "gp_to_convex",
     "hurwitz_second_order",
     "hurwitz_third_order",
     "lyapunov_from_system",
@@ -82,4 +98,6 @@ __all__ = [
     "rounding_bias_lemma",
     "rounding_gap_lemma",
     "safe_mul_div",
+    "strongly_convex",
+    "unique_minimizer",
 ]

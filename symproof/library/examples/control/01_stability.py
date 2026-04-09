@@ -33,6 +33,7 @@ Run: uv run python -m symproof.library.examples.control.01_stability
 """
 
 import sympy
+
 from symproof import Axiom, AxiomSet
 from symproof.library.control import closed_loop_stability
 
@@ -74,9 +75,9 @@ bundle = closed_loop_stability(
 )
 
 print("Satellite single-axis attitude control (PD on rigid body)")
-print(f"  Plant:      G(s) = 1/(J·s²)")
-print(f"  Controller: C(s) = Kp + Kd·s")
-print(f"  CL poly:    J·s² + Kd·s + Kp")
+print("  Plant:      G(s) = 1/(J·s²)")
+print("  Controller: C(s) = Kp + Kd·s")
+print("  CL poly:    J·s² + Kd·s + Kp")
 print(f"  Status:     {bundle.proof_result.status.value}")
 print(f"  Hash:       {bundle.bundle_hash[:24]}...")
 print()

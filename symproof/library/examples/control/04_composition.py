@@ -38,7 +38,8 @@ Run: uv run python -m symproof.library.examples.control.04_composition
 """
 
 import sympy
-from symproof import Axiom, AxiomSet, ProofBuilder, LemmaKind, seal
+
+from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal
 from symproof.library.control import (
     controllability_rank,
     lyapunov_from_system,

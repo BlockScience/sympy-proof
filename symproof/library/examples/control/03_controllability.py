@@ -40,6 +40,7 @@ Run: uv run python -m symproof.library.examples.control.03_controllability
 """
 
 import sympy
+
 from symproof import Axiom, AxiomSet
 from symproof.library.control import controllability_rank, observability_rank
 
@@ -65,34 +66,34 @@ axioms = AxiomSet(
 # ─── Controllability: can the wheel steer to any attitude? ───
 ctrl = controllability_rank(axioms, A, B)
 print("Spacecraft ADCS controllability:")
-print(f"  Controllability matrix: [B | AB] = [[0,1],[1,0]]")
+print("  Controllability matrix: [B | AB] = [[0,1],[1,0]]")
 print(f"  det(C·C^T) ≠ 0?  {ctrl.proof_result.status.value}")
 
 # ─── Observability with star tracker only (theta) ───────────
 C_star = sympy.Matrix([[1, 0]])
 obs_star = observability_rank(axioms, A, C_star)
-print(f"\nStar tracker only (measures theta):")
-print(f"  Observability matrix: [C; CA] = [[1,0],[0,1]]")
+print("\nStar tracker only (measures theta):")
+print("  Observability matrix: [C; CA] = [[1,0],[0,1]]")
 print(f"  Observable?  {obs_star.proof_result.status.value}")
-print(f"  → Kalman filter CAN estimate omega from theta measurements")
+print("  → Kalman filter CAN estimate omega from theta measurements")
 
 # ─── Observability with gyro only (omega) ───────────────────
 C_gyro = sympy.Matrix([[0, 1]])
-print(f"\nGyroscope only (measures omega):")
+print("\nGyroscope only (measures omega):")
 try:
     obs_gyro = observability_rank(axioms, A, C_gyro)
     print(f"  Observable?  {obs_gyro.proof_result.status.value}")
 except ValueError:
-    print(f"  NOT observable (seal rejected — det = 0)")
-    print(f"  → Kalman filter CANNOT estimate theta from gyro alone")
-    print(f"  → Need star tracker or combined sensor suite")
+    print("  NOT observable (seal rejected — det = 0)")
+    print("  → Kalman filter CANNOT estimate theta from gyro alone")
+    print("  → Need star tracker or combined sensor suite")
 
 # ─── Observability with both sensors ────────────────────────
 C_both = sympy.Matrix([[1, 0], [0, 1]])
 obs_both = observability_rank(axioms, A, C_both)
-print(f"\nBoth sensors (star tracker + gyro):")
+print("\nBoth sensors (star tracker + gyro):")
 print(f"  Observable?  {obs_both.proof_result.status.value}")
-print(f"  → Full state estimation possible (and well-conditioned)")
+print("  → Full state estimation possible (and well-conditioned)")
 
 print()
 print("Summary: controllable with reaction wheel, observable with")

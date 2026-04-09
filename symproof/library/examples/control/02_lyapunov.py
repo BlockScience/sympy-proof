@@ -38,6 +38,7 @@ Run: uv run python -m symproof.library.examples.control.02_lyapunov
 """
 
 import sympy
+
 from symproof import Axiom, AxiomSet
 from symproof.library.control import lyapunov_from_system
 
@@ -75,7 +76,7 @@ for lr in bundle.proof_result.lemma_results:
     print(f"    [{tag}] {lr.lemma_name}")
 
 # Show the constructed Lyapunov function
-print(f"\n  Constructed P (from solving A^T P + PA = -I):")
+print("\n  Constructed P (from solving A^T P + PA = -I):")
 # Extract P from the proof by re-solving (the bundle stores the proof,
 # not the intermediate P matrix — by design, the proof is the artifact)
 p_00 = sympy.Symbol("p_00")
@@ -89,7 +90,7 @@ sol = sympy.solve(
 if sol:
     P_solved = P_sym.subs(sol)
     print(f"    P = {P_solved}")
-    print(f"    V(x) = x^T · P · x is a Lyapunov function")
+    print("    V(x) = x^T · P · x is a Lyapunov function")
 
 print(f"\n  Hash: {bundle.bundle_hash[:24]}...")
 print()
