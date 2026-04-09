@@ -25,7 +25,14 @@ from symproof.models import (
     ProofStatus,
 )
 from symproof.serialization import canonical_srepr, make_canonical_dict, restore_expr
-from symproof.tactics import auto_lemma, try_implication, try_query, try_simplify
+from symproof.tactics import (
+    SignedTerm,
+    auto_lemma,
+    signed_sum_lemmas,
+    try_implication,
+    try_query,
+    try_simplify,
+)
 from symproof.verification import verify_lemma, verify_proof
 
 __all__ = [
@@ -45,6 +52,7 @@ __all__ = [
     "ProofScript",
     "ProofStatus",
     "ReservePairType",
+    "SignedTerm",
     "auto_lemma",
     "canonical_srepr",
     "check_consistency",
@@ -57,6 +65,7 @@ __all__ = [
     "make_canonical_dict",
     "restore_expr",
     "seal",
+    "signed_sum_lemmas",
     "try_implication",
     "try_query",
     "try_simplify",

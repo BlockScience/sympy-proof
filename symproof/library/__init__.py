@@ -35,9 +35,12 @@ from symproof.library.control import (
 from symproof.library.core import max_ge_first, piecewise_collapse
 from symproof.library.defi import (
     DecimalAwarePool,
+    RoundingFavor,
+    RoundingStep,
     amm_output_positive,
     amm_product_nondecreasing,
     chain_error_bound,
+    directional_chain_error,
     div_down,
     div_up,
     fee_complement_positive,
@@ -52,11 +55,14 @@ from symproof.library.defi import (
 
 __all__ = [
     "DecimalAwarePool",
+    "RoundingFavor",
+    "RoundingStep",
     "amm_output_positive",
     "amm_product_nondecreasing",
     "chain_error_bound",
     "closed_loop_stability",
     "controllability_rank",
+    "directional_chain_error",
     "div_down",
     "div_up",
     "fee_complement_positive",

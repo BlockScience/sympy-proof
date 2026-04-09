@@ -81,3 +81,145 @@ class TestAutoLemma:
         x = sympy.Symbol("x")
         lem = auto_lemma("unknown", expr=x > 0)
         assert lem is None
+
+
+# ===================================================================
+# Signed accumulation tactic
+# ===================================================================
+
+
+class TestSignedSumLemmas:
+    """Core signed accumulation tactic — domain-agnostic."""
+
+    def test_all_nonneg_net_nonneg(self):
+        """All positive terms → net >= 0."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(1, 3), nonneg=True, label="a"),
+            SignedTerm(expr=sympy.Rational(2, 5), nonneg=True, label="b"),
+        ]
+        lemmas = signed_sum_lemmas(terms, net_nonneg=True, name_prefix="t")
+        net_lemma = lemmas[-1]
+        assert "net" in net_lemma.name
+        result = verify_lemma(net_lemma)
+        assert result.passed
+
+    def test_mixed_signs_net_positive(self):
+        """Positive terms dominate negative → net >= 0."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(3, 4), nonneg=True, label="gain"),
+            SignedTerm(expr=sympy.Rational(-1, 4), nonneg=False, label="loss"),
+        ]
+        # net = 3/4 - 1/4 = 1/2 >= 0
+        lemmas = signed_sum_lemmas(terms, net_nonneg=True, name_prefix="m")
+        for lem in lemmas:
+            result = verify_lemma(lem)
+            assert result.passed, f"{lem.name} failed: {result.error}"
+
+    def test_net_negative_fails(self):
+        """Negative terms dominate → net >= 0 FAILS."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(1, 7), nonneg=True, label="small"),
+            SignedTerm(expr=sympy.Rational(-5, 7), nonneg=False, label="big"),
+        ]
+        # net = 1/7 - 5/7 = -4/7 < 0
+        lemmas = signed_sum_lemmas(terms, net_nonneg=True, name_prefix="f")
+        net_lemma = lemmas[-1]
+        assert "NEGATIVE" in net_lemma.description
+        result = verify_lemma(net_lemma)
+        assert not result.passed
+
+    def test_net_nonpositive_mode(self):
+        """Lyapunov-style: all terms negative → net <= 0."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(-1, 3), nonneg=False, label="damp1"),
+            SignedTerm(expr=sympy.Rational(-1, 5), nonneg=False, label="damp2"),
+        ]
+        lemmas = signed_sum_lemmas(
+            terms, net_nonneg=False, name_prefix="lyap",
+        )
+        net_lemma = lemmas[-1]
+        result = verify_lemma(net_lemma)
+        assert result.passed
+
+    def test_net_nonpositive_fails_when_positive(self):
+        """Net is positive but we wanted <= 0 → FAILS."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(3, 4), nonneg=True, label="growth"),
+            SignedTerm(expr=sympy.Rational(-1, 4), nonneg=False, label="damp"),
+        ]
+        # net = 1/2 > 0, but we want <= 0
+        lemmas = signed_sum_lemmas(
+            terms, net_nonneg=False, name_prefix="bad",
+        )
+        net_lemma = lemmas[-1]
+        assert "POSITIVE" in net_lemma.description
+        result = verify_lemma(net_lemma)
+        assert not result.passed
+
+    def test_magnitude_bounds(self):
+        """Magnitude lemmas generated when bound is provided."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+        from symproof.verification import verify_lemma
+
+        terms = [
+            SignedTerm(
+                expr=sympy.Rational(1, 3), nonneg=True,
+                bound=sympy.Integer(1), label="bounded",
+            ),
+        ]
+        lemmas = signed_sum_lemmas(terms, name_prefix="b")
+        bound_lemmas = [l for l in lemmas if "bound" in l.name]
+        assert len(bound_lemmas) == 1
+        result = verify_lemma(bound_lemmas[0])
+        assert result.passed
+
+    def test_no_magnitude_without_bound(self):
+        """No magnitude lemma when bound is None."""
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+
+        terms = [
+            SignedTerm(expr=sympy.Rational(1, 3), nonneg=True, label="no_bound"),
+        ]
+        lemmas = signed_sum_lemmas(terms, name_prefix="nb")
+        bound_lemmas = [l for l in lemmas if "bound" in l.name]
+        assert len(bound_lemmas) == 0
+
+    def test_sealed_proof_with_signed_sum(self):
+        """Full sealed proof using signed accumulation."""
+        from symproof import Axiom, AxiomSet, ProofBuilder, seal
+        from symproof.tactics import SignedTerm, signed_sum_lemmas
+
+        axioms = AxiomSet(
+            name="test",
+            axioms=(Axiom(name="base", expr=sympy.Eq(1, 1)),),
+        )
+        terms = [
+            SignedTerm(expr=sympy.Rational(2, 3), nonneg=True, label="a"),
+            SignedTerm(expr=sympy.Rational(-1, 5), nonneg=False, label="b"),
+        ]
+        lemmas = signed_sum_lemmas(terms, net_nonneg=True, name_prefix="s")
+
+        total = sum(t.expr for t in terms)
+        h = axioms.hypothesis("net_ok", expr=sympy.Ge(total, 0))
+        builder = ProofBuilder(
+            axioms, h.name, name="signed_proof", claim="net >= 0",
+        )
+        for lem in lemmas:
+            builder = builder.add_lemma(lem)
+        bundle = seal(axioms, h, builder.build())
+        assert len(bundle.bundle_hash) == 64

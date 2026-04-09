@@ -24,6 +24,9 @@ Existing proofs (unchanged):
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
+
 import sympy
 from sympy import Integer, Rational, Symbol, ceiling, floor
 
@@ -115,7 +118,194 @@ def rounding_gap_lemma(
 
 
 # ===================================================================
-# Compound rounding error — N-step error accumulation
+# Directional rounding — who benefits from truncation?
+# ===================================================================
+
+
+class RoundingFavor(StrEnum):
+    """Who a rounding operation should favor."""
+
+    PROTOCOL = "protocol"
+    """Rounding favors the protocol / pool / LPs."""
+
+    USER = "user"
+    """Rounding favors the user / swapper / depositor."""
+
+
+@dataclass(frozen=True)
+class RoundingStep:
+    """One step in a multi-operation pipeline with directional intent.
+
+    Parameters
+    ----------
+    exact:
+        The real-valued result before rounding.
+    rounded:
+        The integer result after rounding (``floor`` or ``ceil``).
+    favor:
+        Who this step **should** favor.
+    label:
+        Human description (e.g., ``"swap output"``, ``"fee deduction"``).
+    """
+
+    exact: sympy.Basic
+    rounded: sympy.Basic
+    favor: RoundingFavor
+    label: str = ""
+
+    @property
+    def error(self) -> sympy.Basic:
+        """Signed error: ``exact - rounded``.
+
+        Positive means rounded value is LESS than exact (floor behavior).
+        Negative means rounded value is MORE than exact (ceil behavior).
+        """
+        return self.exact - self.rounded
+
+    @property
+    def uses_floor(self) -> bool:
+        """True if ``rounded <= exact`` (floor-style rounding)."""
+        diff = sympy.simplify(self.exact - self.rounded)
+        return diff.is_nonnegative is True  # type: ignore[return-value]
+
+    @property
+    def uses_ceil(self) -> bool:
+        """True if ``rounded >= exact`` (ceil-style rounding)."""
+        diff = sympy.simplify(self.rounded - self.exact)
+        return diff.is_nonnegative is True  # type: ignore[return-value]
+
+    @property
+    def direction_correct(self) -> bool:
+        """Check if the rounding direction matches the declared favor.
+
+        - Favor PROTOCOL on an output/payment TO user → floor is correct
+          (user receives less, protocol keeps dust)
+        - Favor PROTOCOL on a deduction/fee FROM user → ceil is correct
+          (user pays more, protocol takes dust)
+
+        Convention: ``floor`` favors the NON-recipient (protocol keeps
+        dust from what it sends, user keeps dust from what they send).
+        For this check, we use the simpler rule: floor means
+        ``rounded <= exact``, so the holder of the rounding dust is
+        the party that did NOT receive ``rounded``.
+
+        Since the caller declares ``favor`` explicitly, we just check:
+        - favor=PROTOCOL + floor → correct (protocol withholds dust)
+        - favor=PROTOCOL + ceil → correct (protocol charges dust)
+        - favor=USER + floor → MISMATCH (user gets less)
+        - favor=USER + ceil → MISMATCH (user pays more)
+
+        Wait — that's wrong.  The correct rule is:
+
+        - ``favor=PROTOCOL`` means "the rounded value should be
+          conservative FOR THE PROTOCOL."
+          - On outputs to user: ``floor(exact)`` → user gets less ✓
+          - On charges from user: ``ceil(exact)`` → user pays more ✓
+        - ``favor=USER`` means "the rounded value should be
+          conservative FOR THE USER."
+          - On outputs to user: ``ceil(exact)`` → user gets more ✓
+          - On charges from user: ``floor(exact)`` → user pays less ✓
+
+        Since we can't know from the expression alone whether this is
+        an "output" or "charge", the caller encodes the semantic via
+        the combination of rounding function + favor direction.
+
+        Final rule: a step is correctly directional if
+        ``favor=PROTOCOL ↔ uses_floor`` OR ``favor=USER ↔ uses_ceil``
+        for the STANDARD case (computing an amount the user receives).
+
+        **We simplify**: the caller is responsible for choosing
+        floor/ceil to match their intent.  We just verify that the
+        rounding error's sign is consistent with the declared favor:
+        - ``favor=PROTOCOL``: ``error >= 0`` (exact >= rounded, user
+          gets at most the true value)
+        - ``favor=USER``: ``error <= 0`` (exact <= rounded, user
+          gets at least the true value)
+        """
+        if self.favor == RoundingFavor.PROTOCOL:
+            return self.uses_floor
+        return self.uses_ceil
+
+
+def directional_chain_error(
+    steps: list[RoundingStep],
+    name_prefix: str = "dir_err",
+) -> list[Lemma]:
+    """Prove directional error bounds across a multi-step pipeline.
+
+    Built on the core ``signed_sum_lemmas`` tactic (from
+    ``symproof.tactics``), adding DeFi-specific semantics:
+
+    1. **Per-step direction**: error sign matches declared favor
+    2. **Per-step magnitude**: ``|error| < 1`` (max 1 wei per op)
+    3. **Directional mismatch warnings**: flagged in lemma descriptions
+    4. **Net flow check**: net error >= 0 (protocol doesn't leak)
+
+    Parameters
+    ----------
+    steps:
+        Ordered list of ``RoundingStep`` objects.
+    name_prefix:
+        Prefix for generated lemma names.
+
+    Returns
+    -------
+    list[Lemma]
+        Per-term sign + bound lemmas (from core tactic), plus a
+        DeFi-specific net-flow lemma.  Mismatch steps are flagged.
+    """
+    from symproof.tactics import SignedTerm, signed_sum_lemmas
+
+    # Convert DeFi RoundingSteps to core SignedTerms.
+    # PROTOCOL favor → error >= 0 (nonneg=True)
+    # USER favor → error <= 0 (nonneg=False)
+    signed_terms = []
+    for step in steps:
+        is_correct = step.direction_correct
+        mismatch = "" if is_correct else " ⚠ MISMATCH"
+        lbl = (step.label or "step") + mismatch
+        signed_terms.append(
+            SignedTerm(
+                expr=step.error,
+                nonneg=(step.favor == RoundingFavor.PROTOCOL),
+                bound=Integer(1),  # max 1 wei per rounding op
+                label=lbl,
+            )
+        )
+
+    # Delegate to core tactic: sign + bound + net direction
+    lemmas = signed_sum_lemmas(
+        signed_terms,
+        net_nonneg=True,  # net must favor protocol
+        name_prefix=name_prefix,
+    )
+
+    # Enhance the net lemma description with DeFi-specific warning
+    net_lemma = lemmas[-1]
+    total_error = sum(
+        step.error for step in steps
+    )  # type: ignore[arg-type]
+    net_is_safe = sympy.simplify(
+        sympy.Ge(total_error, Integer(0))
+    ) is sympy.true
+    if not net_is_safe and "NEGATIVE" not in net_lemma.description:
+        # Replace the net lemma with DeFi-specific description
+        lemmas[-1] = Lemma(
+            name=net_lemma.name,
+            kind=net_lemma.kind,
+            expr=net_lemma.expr,
+            depends_on=net_lemma.depends_on,
+            description=(
+                "Net error >= 0 ⚠ NET NEGATIVE"
+                " — pipeline leaks value from protocol!"
+            ),
+        )
+
+    return lemmas
+
+
+# ===================================================================
+# Compound rounding error — N-step error accumulation (legacy)
 # ===================================================================
 
 
