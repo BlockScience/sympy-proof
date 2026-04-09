@@ -20,4 +20,10 @@ convex/
 defi/
     AMM swap audit: rounding direction, phantom overflow,
     directional error chains, decimal mismatch, composed safety.
+
+dip_routing/
+    Reproves main results of Zargham, Ribeiro & Jadbabaie (2014)
+    "Discounted Integral Priority Routing For Data Networks."
+    Heavy ball equivalence, bounded gradient, Lagrangian structure,
+    dual convergence, and queue stability.
 """
