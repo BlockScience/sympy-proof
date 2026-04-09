@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from symproof.models import AxiomSet, Lemma, LemmaKind, ProofScript
+from symproof.models import AxiomSet, Lemma, LemmaKind, ProofBundle, ProofScript
 
 if TYPE_CHECKING:
     import sympy
@@ -67,6 +67,35 @@ class ProofBuilder:
         self._name = name
         self._claim = claim
         self._lemmas: list[Lemma] = []
+        self._imported_bundles: list[ProofBundle] = []
+
+    def import_bundle(self, bundle: ProofBundle) -> ProofBuilder:
+        """Import a sealed bundle as a premise for this proof.
+
+        The imported bundle's hypothesis becomes an available fact.
+        When verifying, the imported bundle's proof is re-verified
+        by default (see ``trust_imports`` on ``verify_proof``).
+
+        Parameters
+        ----------
+        bundle:
+            A sealed ``ProofBundle``.  Must share the same axiom set
+            (matching ``axiom_set_hash``).
+
+        Raises
+        ------
+        ValueError
+            If the bundle's axiom set hash doesn't match.
+        """
+        if bundle.axiom_set.axiom_set_hash != self._axiom_set_hash:
+            raise ValueError(
+                f"Imported bundle '{bundle.hypothesis.name}' is "
+                f"bound to a different axiom set "
+                f"(hash={bundle.axiom_set.axiom_set_hash!r}). "
+                f"Expected hash={self._axiom_set_hash!r}."
+            )
+        self._imported_bundles.append(bundle)
+        return self
 
     def lemma(
         self,
@@ -114,4 +143,5 @@ class ProofBuilder:
             axiom_set_hash=self._axiom_set_hash,
             claim=self._claim,
             lemmas=tuple(self._lemmas),
+            imported_bundles=tuple(self._imported_bundles),
         )

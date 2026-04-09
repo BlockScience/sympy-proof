@@ -58,6 +58,9 @@ class TestHashProof:
         data = {
             "axiom_set_hash": script.axiom_set_hash,
             "target": script.target,
+            "imported_bundle_hashes": sorted(
+                b.bundle_hash for b in script.imported_bundles
+            ),
             "lemmas": [
                 {
                     "name": lemma.name,

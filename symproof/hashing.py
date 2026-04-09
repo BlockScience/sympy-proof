@@ -87,6 +87,9 @@ def hash_proof(script: ProofScript) -> str:
     data: dict[str, Any] = {
         "axiom_set_hash": script.axiom_set_hash,
         "target": script.target,
+        "imported_bundle_hashes": sorted(
+            b.bundle_hash for b in script.imported_bundles
+        ),
         "lemmas": lemma_records,
     }
     serialized = _serialize_for_hash(data)

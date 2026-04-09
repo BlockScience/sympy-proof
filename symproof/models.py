@@ -255,6 +255,14 @@ class ProofScript(BaseModel):
 
     lemmas: tuple[Lemma, ...]
 
+    imported_bundles: tuple[ProofBundle, ...] = ()
+    """Sealed bundles whose hypothesis results are used as premises.
+
+    Each imported bundle must share the same ``axiom_set_hash``.
+    When verifying, imported bundles are re-verified by default
+    (see ``trust_imports`` on ``verify_proof``).
+    """
+
     def to_evidence(self) -> dict[str, Any]:
         """Serialize as a JSON-compatible evidence record.
 
@@ -266,6 +274,9 @@ class ProofScript(BaseModel):
             "target": self.target,
             "axiom_set_hash": self.axiom_set_hash,
             "claim": self.claim,
+            "imported_bundles": [
+                b.to_evidence() for b in self.imported_bundles
+            ],
             "lemmas": [
                 {
                     "name": lem.name,
@@ -327,12 +338,17 @@ class ProofScript(BaseModel):
                     description=ld.get("description", ""),
                 )
             )
+        imported = tuple(
+            ProofBundle.from_evidence(bd)
+            for bd in data.get("imported_bundles", [])
+        )
         return cls(
             name=data["name"],
             target=data["target"],
             axiom_set_hash=data["axiom_set_hash"],
             claim=data["claim"],
             lemmas=tuple(lemmas),
+            imported_bundles=imported,
         )
 
 
@@ -362,6 +378,70 @@ class ProofBundle(BaseModel):
                 f"ProofBundle requires VERIFIED status, got {self.proof_result.status}"
             )
         return self
+
+    def to_evidence(self) -> dict[str, Any]:
+        """Serialize the full bundle as a JSON-compatible evidence record."""
+        return {
+            "axiom_set": {
+                "name": self.axiom_set.name,
+                "axioms": [
+                    {
+                        "name": a.name,
+                        "expr": sympy.srepr(a.expr),
+                        "description": a.description,
+                    }
+                    for a in self.axiom_set.axioms
+                ],
+            },
+            "hypothesis": {
+                "name": self.hypothesis.name,
+                "expr": sympy.srepr(self.hypothesis.expr),
+                "axiom_set_hash": self.hypothesis.axiom_set_hash,
+                "description": self.hypothesis.description,
+            },
+            "proof": self.proof.to_evidence(),
+            "proof_result": {
+                "status": self.proof_result.status.value,
+                "proof_hash": self.proof_result.proof_hash,
+            },
+            "bundle_hash": self.bundle_hash,
+        }
+
+    @classmethod
+    def from_evidence(cls, data: dict[str, Any]) -> ProofBundle:
+        """Restore a ``ProofBundle`` from an evidence dict."""
+        ax_data = data["axiom_set"]
+        axiom_set = AxiomSet(
+            name=ax_data["name"],
+            axioms=tuple(
+                Axiom(
+                    name=a["name"],
+                    expr=sympy.sympify(a["expr"]),
+                    description=a.get("description", ""),
+                )
+                for a in ax_data["axioms"]
+            ),
+        )
+        hyp_data = data["hypothesis"]
+        hypothesis = Hypothesis(
+            name=hyp_data["name"],
+            expr=sympy.sympify(hyp_data["expr"]),
+            axiom_set_hash=hyp_data["axiom_set_hash"],
+            description=hyp_data.get("description", ""),
+        )
+        proof = ProofScript.from_evidence(data["proof"])
+        pr_data = data["proof_result"]
+        proof_result = ProofResult(
+            status=ProofStatus(pr_data["status"]),
+            proof_hash=pr_data.get("proof_hash"),
+        )
+        return cls(
+            axiom_set=axiom_set,
+            hypothesis=hypothesis,
+            proof=proof,
+            proof_result=proof_result,
+            bundle_hash=data["bundle_hash"],
+        )
 
 
 # ---------------------------------------------------------------------------

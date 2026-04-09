@@ -95,6 +95,27 @@ _QUERY_ADVISORY = (
     "(e.g., 0 < x < 1) or complex compound expressions."
 )
 
+_INTEGER_TRUNCATION_ADVISORY = (
+    "Expression contains floor/ceiling operations. SymPy verifies the "
+    "algebraic identity but cannot reason about truncation error bounds "
+    "symbolically (e.g., 0 <= x - floor(x) < 1). Concrete-value lemmas "
+    "or manual error-bound chains are needed for truncation guarantees."
+)
+
+_MODULAR_ARITHMETIC_ADVISORY = (
+    "Expression contains Mod (modular arithmetic). SymPy can evaluate "
+    "concrete modular expressions but has limited symbolic reasoning "
+    "about congruences. Verify that modular identities hold across "
+    "the full input domain, not just the tested cases."
+)
+
+_FIXED_POINT_SCALING_ADVISORY = (
+    "Expression involves floor(a*b/S) or floor(a/b*S) patterns typical "
+    "of fixed-point (WAD/RAY) arithmetic. The real-valued identity may "
+    "not hold under integer truncation — the rounding error can compound "
+    "across chained operations. Review each step's error bound."
+)
+
 
 def _has_division(expr: sympy.Basic) -> bool:
     """Check if an expression contains division (Pow with negative exponent)."""
@@ -113,6 +134,69 @@ def _has_domain_sensitive_ops(expr: sympy.Basic) -> bool:
     if isinstance(expr, sympy.Pow) and expr.exp == sympy.Rational(1, 2):
         return True
     return any(_has_domain_sensitive_ops(arg) for arg in expr.args)
+
+
+def _has_floor_ceiling(expr: sympy.Basic) -> bool:
+    """Check if an expression contains floor or ceiling operations."""
+    if isinstance(expr, (sympy.floor, sympy.ceiling)):
+        return True
+    return any(_has_floor_ceiling(arg) for arg in expr.args)
+
+
+def _has_mod(expr: sympy.Basic) -> bool:
+    """Check if an expression contains Mod operations."""
+    if isinstance(expr, sympy.Mod):
+        return True
+    return any(_has_mod(arg) for arg in expr.args)
+
+
+def _has_scaling_division(expr: sympy.Basic) -> bool:
+    """Check if a Mul contains division — either Pow(x,-1) or a Rational < 1.
+
+    Handles both symbolic division (``a/b`` → ``Mul(a, Pow(b, -1))``)
+    and constant division (``a/WAD`` → ``Mul(Rational(1, WAD), a)``).
+    """
+    if _has_division(expr):
+        return True
+    # Constant division: Rational coefficient < 1 in a Mul
+    if isinstance(expr, sympy.Mul):
+        for arg in expr.args:
+            if isinstance(arg, sympy.Rational) and not isinstance(arg, sympy.Integer):
+                return True
+    return False
+
+
+def _has_fixed_point_pattern(expr: sympy.Basic) -> bool:
+    """Detect floor(a*b/S) or floor(a/b*S) patterns typical of WAD/RAY math.
+
+    Looks for floor() wrapping an expression that contains both
+    multiplication (multiple symbolic factors) and division — the
+    hallmark of fixed-point scaling.
+    """
+    if isinstance(expr, sympy.floor):
+        inner = expr.args[0]
+        has_mul = isinstance(inner, sympy.Mul) and sum(
+            1 for a in inner.args if not isinstance(a, sympy.Number)
+        ) >= 2
+        has_div = _has_scaling_division(inner)
+        if has_mul and has_div:
+            return True
+    return any(_has_fixed_point_pattern(arg) for arg in expr.args)
+
+
+def _collect_integer_advisories(
+    expr: sympy.Basic, *extra_exprs: sympy.Basic,
+) -> list[str]:
+    """Collect all applicable integer/fixed-point advisories for expressions."""
+    advisories: list[str] = []
+    all_exprs = (expr, *extra_exprs)
+    if any(_has_floor_ceiling(e) for e in all_exprs):
+        advisories.append(_INTEGER_TRUNCATION_ADVISORY)
+    if any(_has_mod(e) for e in all_exprs):
+        advisories.append(_MODULAR_ARITHMETIC_ADVISORY)
+    if any(_has_fixed_point_pattern(e) for e in all_exprs):
+        advisories.append(_FIXED_POINT_SCALING_ADVISORY)
+    return advisories
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +221,12 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
         assumption_subs = _build_assumption_subs(lemma.assumptions)
         expr_with_assumptions = lemma.expr.subs(assumption_subs)
         advisories: list[str] = []
+
+        # Collect integer/fixed-point advisories from all expressions.
+        int_check_exprs = [lemma.expr, expr_with_assumptions]
+        if lemma.expected is not None:
+            int_check_exprs.append(lemma.expected)
+        advisories.extend(_collect_integer_advisories(*int_check_exprs))
 
         if lemma.kind == LemmaKind.EQUALITY:
             if lemma.expected is None:
@@ -340,6 +430,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                     lemma_name=lemma.name,
                     passed=True,
                     actual_value=sympy.Integer(0),
+                    advisories=tuple(advisories),
                 )
 
             # Fallback: trigsimp for polar/spherical transforms
@@ -349,6 +440,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                     lemma_name=lemma.name,
                     passed=True,
                     actual_value=sympy.Integer(0),
+                    advisories=tuple(advisories),
                 )
 
             return LemmaResult(
@@ -356,6 +448,7 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
                 passed=False,
                 actual_value=diff,
                 error=f"Transformed simplify(expr - expected) = {diff}, not 0",
+                advisories=tuple(advisories),
             )
 
         return LemmaResult(  # pragma: no cover
@@ -373,14 +466,75 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
 # ---------------------------------------------------------------------------
 
 
-def verify_proof(script: ProofScript) -> ProofResult:
+def verify_proof(
+    script: ProofScript,
+    *,
+    trust_imports: bool = False,
+) -> ProofResult:
     """Verify a complete proof script.
 
     Each lemma is verified independently.  A single failing lemma fails
     the entire proof.  This function checks mathematical validity only —
     context binding is enforced in ``seal()``.
+
+    Parameters
+    ----------
+    script:
+        The proof script to verify.
+    trust_imports:
+        If ``False`` (default), imported bundles are re-verified by
+        running ``verify_proof`` on each imported bundle's proof script.
+        If ``True``, imported bundles are accepted at face value — use
+        only during exploratory work.  ``seal()`` always passes
+        ``trust_imports=False``.
     """
-    lemma_results: list[LemmaResult] = []
+    all_advisories: list[str] = []
+    import_results: list[LemmaResult] = []
+
+    # --- Phase 1: verify imported bundles ---
+    for bundle in script.imported_bundles:
+        if trust_imports:
+            import_results.append(
+                LemmaResult(
+                    lemma_name=f"import:{bundle.hypothesis.name}",
+                    passed=True,
+                    advisories=(
+                        "TRUSTED IMPORT: verification skipped "
+                        "(trust_imports=True). Re-run with "
+                        "trust_imports=False or seal() to verify.",
+                    ),
+                )
+            )
+            continue
+
+        sub_result = verify_proof(bundle.proof)
+        passed = sub_result.status == ProofStatus.VERIFIED
+        import_results.append(
+            LemmaResult(
+                lemma_name=f"import:{bundle.hypothesis.name}",
+                passed=passed,
+                error=(
+                    sub_result.failure_summary if not passed else None
+                ),
+                advisories=sub_result.advisories,
+            )
+        )
+        if not passed:
+            all_results = tuple(import_results)
+            return ProofResult(
+                status=ProofStatus.FAILED,
+                proof_hash=hash_proof(script),
+                lemma_results=all_results,
+                failure_summary=(
+                    f"Imported bundle "
+                    f"'{bundle.hypothesis.name}' "
+                    f"failed re-verification: "
+                    f"{sub_result.failure_summary}"
+                ),
+            )
+
+    # --- Phase 2: verify local lemmas ---
+    lemma_results: list[LemmaResult] = list(import_results)
     for lemma in script.lemmas:
         result = verify_lemma(lemma)
         lemma_results.append(result)
@@ -389,11 +543,12 @@ def verify_proof(script: ProofScript) -> ProofResult:
                 status=ProofStatus.FAILED,
                 proof_hash=hash_proof(script),
                 lemma_results=tuple(lemma_results),
-                failure_summary=f"Lemma '{lemma.name}' failed: {result.error}",
+                failure_summary=(
+                    f"Lemma '{lemma.name}' failed: {result.error}"
+                ),
             )
 
-    # Aggregate advisories from all lemma results
-    all_advisories: list[str] = []
+    # Aggregate advisories from all results
     for lr in lemma_results:
         for adv in lr.advisories:
             all_advisories.append(f"[{lr.lemma_name}] {adv}")

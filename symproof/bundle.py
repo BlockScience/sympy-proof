@@ -107,11 +107,23 @@ def seal(
             f"hypothesis.name={hypothesis.name!r}"
         )
 
+    # Check that imported bundles share the same axiom set.
+    for bundle in script.imported_bundles:
+        if bundle.axiom_set.axiom_set_hash != actual_hash:
+            raise ValueError(
+                f"Imported bundle '{bundle.hypothesis.name}' is bound "
+                f"to axiom set '{bundle.axiom_set.name}' "
+                f"(hash={bundle.axiom_set.axiom_set_hash!r}), which "
+                f"does not match the current axiom set "
+                f"'{axiom_set.name}' (hash={actual_hash!r})."
+            )
+
     # Check that lemma assumptions do not contradict axioms.
     # Axioms are authoritative — lemma assumptions must be consistent.
     _check_assumptions_consistent(axiom_set, script)
 
-    result = verify_proof(script)
+    # Always re-verify — no trust_imports shortcut when sealing.
+    result = verify_proof(script, trust_imports=False)
     if result.status != ProofStatus.VERIFIED:
         raise ValueError(
             f"verify_proof returned {result.status.value}, not VERIFIED. "
