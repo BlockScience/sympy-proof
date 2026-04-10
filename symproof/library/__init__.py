@@ -43,6 +43,15 @@ from symproof.library.convex import (
     unique_minimizer,
 )
 from symproof.library.core import max_ge_first, piecewise_collapse
+from symproof.library.linopt import (
+    complementary_slackness,
+    dual_feasible,
+    feasible_point,
+    integer_feasible,
+    lp_optimal,
+    lp_relaxation_bound,
+    strong_duality,
+)
 from symproof.library.physics import (
     constant_acceleration,
     gravitational_potential_from_force,
@@ -81,6 +90,7 @@ __all__ = [
     "amm_product_nondecreasing",
     "chain_error_bound",
     "closed_loop_stability",
+    "complementary_slackness",
     "conjugate_function",
     "controllability_rank",
     "convex_composition",
@@ -89,7 +99,9 @@ __all__ = [
     "convex_sum",
     "directional_chain_error",
     "envelope_theorem",
+    "feasible_point",
     "div_down",
+    "dual_feasible",
     "div_up",
     "fee_complement_positive",
     "gain_margin",
@@ -97,6 +109,9 @@ __all__ = [
     "gp_to_convex",
     "hurwitz_second_order",
     "impulse_momentum",
+    "integer_feasible",
+    "lp_optimal",
+    "lp_relaxation_bound",
     "hurwitz_third_order",
     "lyapunov_from_system",
     "lyapunov_stability",
@@ -115,6 +130,7 @@ __all__ = [
     "safe_mul_div",
     "shm_energy_conservation",
     "shm_solution_verify",
+    "strong_duality",
     "strongly_convex",
     "unique_minimizer",
     "work_energy_theorem",
