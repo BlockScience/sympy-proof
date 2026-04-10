@@ -69,17 +69,20 @@ Always include physical units in comments and SymPy assumptions matching domain 
 
 Axioms are shared — they define the system context that all hypotheses operate within.
 
-```python
-from symproof import Axiom, AxiomSet
+**Always construct axiom sets under `unevaluated()`** to prevent SymPy from collapsing expressions like `J > 0` to `True` when `J` has `positive=True`:
 
-axioms = AxiomSet(
-    name="satellite_adcs",
-    axioms=(
-        Axiom(name="inertia_positive", expr=J > 0),
-        Axiom(name="proportional_gain_positive", expr=Kp > 0),
-        Axiom(name="derivative_gain_positive", expr=Kd > 0),
-    ),
-)
+```python
+from symproof import Axiom, AxiomSet, unevaluated
+
+with unevaluated():
+    axioms = AxiomSet(
+        name="satellite_adcs",
+        axioms=(
+            Axiom(name="inertia_positive", expr=J > 0),
+            Axiom(name="proportional_gain_positive", expr=Kp > 0),
+            Axiom(name="derivative_gain_positive", expr=Kd > 0),
+        ),
+    )
 ```
 
 Rules:

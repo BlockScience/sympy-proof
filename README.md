@@ -102,7 +102,10 @@ The goal: an open-source verification and validation stack where symbolic proofs
 - **Composable** — Import sealed proofs as building blocks. Prove `A`, prove `B`, then import both into a proof of `C`.
 - **Hidden axiom detection** — When a proof depends on an external theorem, `seal(foundations=...)` enforces that all of the theorem's assumptions are declared. Missing assumptions are a hard error.
 - **Inherited vs. posited axioms** — `Axiom(inherited=True)` marks conditions that came from a foundation proof, not from the proof author. The full assumption provenance is traceable.
-- **Advisory system** — When verification passes through known SymPy limitations (domain-ignoring simplification, heuristic Q-system), the result flags it for human review.
+- **Evaluation control** — `unevaluated()` preserves expression structure during construction; `evaluation()` gates when simplification actually happens. No hidden eager evaluation.
+- **Citation tracking** — Inherited axioms require `Citation(source="...")` for provenance. The full assumption chain is traceable from proof to external source.
+- **Falsity and consistency guards** — `seal()` rejects provably false axioms and contradictory axiom pairs. Load-bearing symbol assumptions without matching axioms are a hard error.
+- **Advisory system** — Every sealed proof reports its full assumption set (posited, inherited, external) plus SymPy limitation flags for human review.
 - **False-positive protection** — `seal()` rejects proofs where lemma assumptions contradict axioms. Axioms are authoritative.
 
 ## Install
@@ -167,6 +170,12 @@ Pre-built, reusable proof bundles organized by domain. Import them into your pro
 |----------|--------|
 | `max_ge_first(ax, a, b)` | Max(a, b) >= a |
 | `piecewise_collapse(ax, expr, cond, fb)` | Piecewise collapses to active branch |
+
+### Envelope Theorem (`symproof.library.envelope`)
+
+| Function | Proves |
+|----------|--------|
+| `envelope_theorem(ax, f, x, theta)` | Danskin's envelope theorem: dV/dtheta = df/dtheta at the maximiser |
 
 ### Control Systems (`symproof.library.control`)
 

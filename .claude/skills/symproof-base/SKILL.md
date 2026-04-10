@@ -40,6 +40,10 @@ AxiomSet → axiom_set_hash
 4. Imported bundles share the same axiom set
 5. All lemmas pass verification (imports re-verified, no trust shortcut)
 6. Foundation coverage: when `foundations=` is provided, every axiom in each foundation's axiom set must exist in the downstream axiom set (hidden axiom enforcement)
+7. No false axioms: `simplify(axiom.expr)` must not be `False` (checked at AxiomSet construction)
+8. Pairwise consistency: no two axioms may contradict (checked at seal time, `check_consistency=False` to skip)
+9. Load-bearing accounting: symbol constructor assumptions (e.g., `Symbol("x", positive=True)`) that affect lemma verification must be declared as axioms
+10. Assumption reporting: every sealed bundle's advisories enumerate all posited, inherited, and external assumptions
 
 ## Verification strategies (LemmaKind)
 
@@ -82,6 +86,9 @@ unique = unique_minimizer(axioms, f, vars, m)  # internally imports strongly_con
 - `observability_rank(ax, A, C)` — Gramian det ≠ 0
 - `quadratic_invariant(ax, states, dots, V)` — dV/dt = 0
 
+### envelope — Danskin's envelope theorem
+- `envelope_theorem(ax, f, x, theta)` — prove dV/dtheta = df/dtheta|_{x*} for strongly concave f
+
 ### convex — optimization problem certification
 - `convex_scalar / convex_hessian / strongly_convex` — convexity proofs
 - `conjugate_function` — compute and verify Fenchel conjugate
@@ -95,6 +102,45 @@ unique = unique_minimizer(axioms, f, vars, m)  # internally imports strongly_con
 - `mul_down / mul_up / div_down / div_up` — directed rounding
 - `rounding_bias_lemma / rounding_gap_lemma / chain_error_bound` — error analysis
 - `phantom_overflow_check / no_phantom_overflow_check` — uint256 safety
+
+## Evaluation control: `unevaluated()` and `evaluation()`
+
+SymPy eagerly evaluates expressions at construction time — `Symbol("x", positive=True) > 0` becomes `True`, losing the structural information. symproof inverts this:
+
+- **`unevaluated()`** — suppress eager evaluation during axiom/expression construction
+- **`evaluation()`** — explicit gate around `simplify()`, `ask()`, `refine()`
+
+**Best practice**: always build axiom sets under `unevaluated()`:
+
+```python
+from symproof import unevaluated
+
+with unevaluated():
+    axioms = AxiomSet(name="system", axioms=(
+        Axiom(name="x_pos", expr=x > 0),  # stays structural, not True
+    ))
+```
+
+All `simplify()`/`ask()`/`refine()` calls in verification.py, bundle.py, tactics.py, and library functions are wrapped in `evaluation()` gates. This makes every evaluation point explicit and auditable.
+
+## Citation and provenance
+
+Inherited axioms must carry a `Citation` for traceability:
+
+```python
+from symproof import Citation
+
+Axiom(
+    name="bounded_gradient",
+    expr=gamma > 0,
+    inherited=True,
+    citation=Citation(source="Flam 2004, Theorem 2"),
+)
+```
+
+`Citation` has two fields:
+- `source: str` — human-readable reference (required)
+- `bundle_hash: str = ""` — optional link to a foundation ProofBundle
 
 ## Hidden axioms and foundation enforcement
 
@@ -117,10 +163,11 @@ Add the foundation's conditions to the downstream axiom set with `inherited=True
 
 ```python
 Axiom(name="bounded_gradient", expr=gamma > 0, inherited=True,
+      citation=Citation(source="Flam 2004, Theorem 2"),
       description="Required by convergence theorem foundation.")
 ```
 
-`inherited=True` means: "this condition was not a design choice — the proof chain forced it." Both posited and inherited axioms are required for soundness, but the distinction traces provenance.
+`inherited=True` means: "this condition was not a design choice — the proof chain forced it." Both posited and inherited axioms are required for soundness, but the distinction traces provenance. The `citation` is required on all inherited axioms — it records where the condition came from.
 
 ### When to use foundations
 

@@ -84,6 +84,17 @@ builder.import_bundle(prior_bundle).lemma("new_step", ...)
 
 ### Step 5: Build and seal
 
+**Always build axiom sets under `unevaluated()`** to prevent SymPy's eager evaluation from collapsing expressions:
+
+```python
+from symproof import unevaluated
+
+with unevaluated():
+    axioms = AxiomSet(name="system", axioms=(...))
+```
+
+Build and seal:
+
 ```python
 script = (
     ProofBuilder(axioms, hypothesis.name, name="...", claim="...")
@@ -102,10 +113,13 @@ bundle = seal(axioms, hypothesis, script,
               foundations=[(foundation, "theorem_name")])
 ```
 
-This enforces that all of the foundation's axioms appear in your axiom set. If they don't, `seal()` names the hidden axioms. Add them with `inherited=True`:
+This enforces that all of the foundation's axioms appear in your axiom set. If they don't, `seal()` names the hidden axioms. Add them with `inherited=True` and a `Citation`:
 
 ```python
+from symproof import Citation
+
 Axiom(name="missing_condition", expr=condition, inherited=True,
+      citation=Citation(source="Theorem source, Author Year"),
       description="Required by theorem_name foundation.")
 ```
 
@@ -123,6 +137,11 @@ print(f"Hypothesis:  {hypothesis.name}")
 print(f"Status:      {bundle.proof_result.status.value}")
 print(f"Hash:        {bundle.bundle_hash}")
 print(f"Advisories:  {len(bundle.proof_result.advisories)}")
+
+# Show assumption summary (always present in advisories)
+for adv in bundle.proof_result.advisories:
+    if "[ASSUMPTIONS]" in adv:
+        print(f"  {adv}")
 
 # Show the proof as the reviewer will see it
 print("\n--- Proof (LaTeX) ---")

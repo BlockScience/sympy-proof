@@ -104,15 +104,22 @@ For each proof, check:
 - Are any missing (the proof holds in a wider space than intended)?
 
 **Axioms (inherited — `inherited=True`):**
-- Trace each inherited axiom back to its foundation proof
+- Trace each inherited axiom back to its foundation proof via its `citation`
+- Does the `citation.source` reference a real, verifiable result?
 - Does the foundation's condition actually hold for THIS system?
 - An inherited axiom means "the proof chain forced this condition" — it needs the same scrutiny as posited axioms, but the failure mode is different: the proof author may not have realized this condition exists
+- The LaTeX export groups axioms into "Posited" and "Inherited" sections with citation sources — use this for review
 
 **Hidden axiom check (HIGHEST PRIORITY):**
 - Does any axiom have `expr=True`? What external theorem does it represent?
 - If a foundation proof exists: does `seal(foundations=...)` pass? If not, what axioms are missing?
 - If no foundation exists: what are the theorem's implicit conditions? List them. Are they valid for this system?
+- Check the `[ASSUMPTIONS]` advisories in `proof_result.advisories` — they enumerate every posited, inherited, and external assumption with citations
 - Violation of hidden axioms — citing a theorem without checking its conditions — is the most common cause of "correct proof, wrong conclusion" failures in applied mathematics
+
+**Load-bearing symbol assumptions:**
+- Were axioms constructed under `unevaluated()`? If not, symbol assumptions may have collapsed axiom expressions to `True`
+- The load-bearing check in `seal()` catches symbol assumptions that affect verification but aren't declared as axioms — review any such findings
 
 **Hypothesis:**
 - Does it match the stated requirement?
