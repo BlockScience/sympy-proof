@@ -42,6 +42,14 @@ from symproof.library.convex import (
     strongly_convex,
     unique_minimizer,
 )
+from symproof.library.circuits import (
+    boolean_entropy,
+    circuit_equivalence,
+    circuit_output,
+    circuit_satisfies,
+    gate_truth_table,
+    r1cs_witness_check,
+)
 from symproof.library.core import max_ge_first, piecewise_collapse
 from symproof.library.topology import (
     continuous_at_point,
@@ -98,6 +106,10 @@ __all__ = [
     "amm_output_positive",
     "amm_product_nondecreasing",
     "chain_error_bound",
+    "boolean_entropy",
+    "circuit_equivalence",
+    "circuit_output",
+    "circuit_satisfies",
     "closed_loop_stability",
     "complementary_slackness",
     "conjugate_function",
@@ -114,6 +126,7 @@ __all__ = [
     "div_up",
     "fee_complement_positive",
     "gain_margin",
+    "gate_truth_table",
     "gravitational_potential_from_force",
     "gp_to_convex",
     "hurwitz_second_order",
@@ -134,6 +147,7 @@ __all__ = [
     "quadratic_invariant",
     "constant_acceleration",
     "rotational_kinematic",
+    "r1cs_witness_check",
     "rounding_bias_lemma",
     "rounding_gap_lemma",
     "safe_mul_div",
