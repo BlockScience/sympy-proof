@@ -330,3 +330,83 @@ class TestLatexDocument:
         # Should contain all the bundle content too
         assert r"\section*{Proof:" in tex
         assert bundle.bundle_hash in tex
+
+
+# ---------------------------------------------------------------------------
+# Inherited axioms and citations in LaTeX
+# ---------------------------------------------------------------------------
+
+
+class TestLatexInheritedAxioms:
+    """Verify that LaTeX export distinguishes inherited from posited axioms."""
+
+    @staticmethod
+    def _bundle_with_inherited():
+        from symproof import Citation
+
+        x = sympy.Symbol("x")
+        axioms = AxiomSet(
+            name="mixed_axioms",
+            axioms=(
+                Axiom(name="x_pos", expr=x > 0),
+                Axiom(
+                    name="ext_theorem",
+                    expr=sympy.S.true,
+                    inherited=True,
+                    citation=Citation(source="Flam 2004, Theorem 2"),
+                ),
+            ),
+        )
+        h = axioms.hypothesis("h", expr=x > 0)
+        script = (
+            ProofBuilder(axioms, h.name, name="mixed", claim="test")
+            .lemma(
+                "l",
+                LemmaKind.QUERY,
+                expr=sympy.Q.positive(x),
+                assumptions={"x": {"positive": True}},
+            )
+            .build()
+        )
+        return seal(axioms, h, script)
+
+    def test_posited_section_present(self):
+        bundle = self._bundle_with_inherited()
+        tex = latex_bundle(bundle)
+        assert "Posited" in tex
+        assert "design choices" in tex
+
+    def test_inherited_section_present(self):
+        bundle = self._bundle_with_inherited()
+        tex = latex_bundle(bundle)
+        assert "Inherited" in tex
+        assert "foundation proofs" in tex
+
+    def test_citation_rendered(self):
+        bundle = self._bundle_with_inherited()
+        tex = latex_bundle(bundle)
+        assert "Flam 2004" in tex
+        assert "Source:" in tex
+
+    def test_posited_axiom_in_posited_section(self):
+        bundle = self._bundle_with_inherited()
+        tex = latex_bundle(bundle)
+        # x_pos should be in the posited section (before inherited)
+        posited_pos = tex.index("Posited")
+        inherited_pos = tex.index("Inherited")
+        x_pos_pos = tex.index("x\\_pos")
+        assert posited_pos < x_pos_pos < inherited_pos
+
+    def test_inherited_axiom_in_inherited_section(self):
+        bundle = self._bundle_with_inherited()
+        tex = latex_bundle(bundle)
+        inherited_pos = tex.index("Inherited")
+        ext_pos = tex.index("ext\\_theorem")
+        assert inherited_pos < ext_pos
+
+    def test_no_inherited_section_when_all_posited(self):
+        """Bundle with no inherited axioms should not have inherited section."""
+        bundle = _simple_bundle()
+        tex = latex_bundle(bundle)
+        assert "Posited" in tex
+        assert "Inherited" not in tex

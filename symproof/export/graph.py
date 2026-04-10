@@ -65,6 +65,10 @@ def _extract_bundle(
 
     # Bundle node
     n_advisories = len(result.advisories)
+    axiom_set = bundle.axiom_set
+    posited_axioms = [a for a in axiom_set.axioms if not a.inherited]
+    inherited_axioms = [a for a in axiom_set.axioms if a.inherited]
+
     nodes.append({
         "id": bid,
         "type": "bundle",
@@ -76,6 +80,17 @@ def _extract_bundle(
         "lemma_count": len(bundle.proof.lemmas),
         "import_count": len(bundle.proof.imported_bundles),
         "advisory_count": n_advisories,
+        "posited_axiom_count": len(posited_axioms),
+        "inherited_axiom_count": len(inherited_axioms),
+        "axioms": [
+            {
+                "name": a.name,
+                "inherited": a.inherited,
+                "citation": a.citation.source if a.citation else None,
+                "is_external": a.expr is sympy.S.true,
+            }
+            for a in axiom_set.axioms
+        ],
     })
 
     # Lemma nodes + intra-proof edges
@@ -319,10 +334,13 @@ def proof_dag_dot(
         nid = node["id"].replace("::", "__").replace("-", "_")
         if node["type"] == "bundle":
             color = _STATUS_COLORS.get(node["status"], "#95a5a6")
+            inh = node.get("inherited_axiom_count", 0)
+            inh_label = f"\\n{inh} inherited axiom(s)" if inh else ""
             label = (
                 f'{node["name"]}\\n'
                 f'{node["hypothesis"]}\\n'
                 f'{node["hash"][:12]}...'
+                f'{inh_label}'
             )
             adv = (
                 f'\\n({node["advisory_count"]} advisory)'
@@ -504,7 +522,9 @@ def proof_dag_mermaid(
             .replace(" ", "_")
         )
         if node["type"] == "bundle":
-            label = f'{node["name"]}<br/>{node["hypothesis"]}'
+            inh = node.get("inherited_axiom_count", 0)
+            inh_label = f"<br/>{inh} inherited" if inh else ""
+            label = f'{node["name"]}<br/>{node["hypothesis"]}{inh_label}'
             status = node["status"]
             lines.append(f'    {nid}["{label}"]')
             if status == "VERIFIED":

@@ -5,12 +5,23 @@ symproof ships with a library of reusable proofs for common results
 that are either tedious to re-derive or require workarounds for SymPy
 limitations. You import a sealed bundle and build on top of it.
 
+This example also shows two important practices:
+
+1. ``unevaluated()`` — construct axiom expressions without SymPy's
+   eager evaluation collapsing them (e.g., ``x > 0`` staying structural
+   instead of becoming ``True`` when ``x`` has ``positive=True``).
+
+2. **Assumption advisories** — ``seal()`` reports all posited and
+   inherited assumptions in the proof result's advisories, so the
+   full assumption set is always visible.
+
 Run: uv run python examples/04_using_the_library.py
 """
 
 import sympy
-from symproof import Axiom, AxiomSet, ProofBuilder, LemmaKind, seal
-from symproof.library.defi import fee_complement_positive, amm_output_positive
+
+from symproof import Axiom, AxiomSet, LemmaKind, ProofBuilder, seal, unevaluated
+from symproof.library.defi import amm_output_positive, fee_complement_positive
 
 # --- Scenario: prove an AMM swap produces positive output ---
 #
@@ -23,16 +34,20 @@ Ry = sympy.Symbol("R_y", positive=True)
 fee = sympy.Symbol("f")
 dx = sympy.Symbol("dx", positive=True)
 
-axioms = AxiomSet(
-    name="amm_pool",
-    axioms=(
-        Axiom(name="rx_pos", expr=Rx > 0),
-        Axiom(name="ry_pos", expr=Ry > 0),
-        Axiom(name="fee_pos", expr=fee > 0),
-        Axiom(name="fee_lt_1", expr=fee < 1),
-        Axiom(name="dx_pos", expr=dx > 0),
-    ),
-)
+# Use unevaluated() to prevent axiom expressions from collapsing.
+# Without it, ``Rx > 0`` would become ``True`` (because Rx has
+# positive=True), losing the structural information.
+with unevaluated():
+    axioms = AxiomSet(
+        name="amm_pool",
+        axioms=(
+            Axiom(name="rx_pos", expr=Rx > 0),
+            Axiom(name="ry_pos", expr=Ry > 0),
+            Axiom(name="fee_pos", expr=fee > 0),
+            Axiom(name="fee_lt_1", expr=fee < 1),
+            Axiom(name="dx_pos", expr=dx > 0),
+        ),
+    )
 
 # Step 1: Use the library to prove the fee complement is positive.
 # This is a one-liner — the library handles the decomposition internally.
@@ -54,11 +69,12 @@ hypothesis = axioms.hypothesis(
 
 my_script = (
     ProofBuilder(
-        axioms, hypothesis.name,
+        axioms,
+        hypothesis.name,
         name="pool_safety_proof",
         claim="AMM pool produces positive output",
     )
-    .import_bundle(output_bundle)    # re-verified automatically
+    .import_bundle(output_bundle)  # re-verified automatically
     .lemma(
         "reserves_positive",
         LemmaKind.QUERY,
@@ -74,6 +90,17 @@ print(f"\nMy proof:          hash={my_bundle.bundle_hash[:16]}...")
 print(f"  Imported: {len(my_script.imported_bundles)} bundle(s)")
 print(f"  Lemmas:   {len(my_script.lemmas)} local + "
       f"{len(my_bundle.proof_result.lemma_results) - len(my_script.lemmas)} import")
+
+# The proof result carries assumption advisories — every assumption
+# is explicitly reported so reviewers can see the full picture.
+assumption_advs = [
+    a for a in my_bundle.proof_result.advisories if "[ASSUMPTIONS]" in a
+]
+print(f"  Assumption advisories: {len(assumption_advs)}")
+for adv in assumption_advs[:2]:
+    print(f"    {adv}")
+if len(assumption_advs) > 2:
+    print(f"    ... and {len(assumption_advs) - 2} more")
 
 # When you seal, the imported bundle is RE-VERIFIED from scratch.
 # For exploratory work, you can skip re-verification:

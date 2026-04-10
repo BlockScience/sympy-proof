@@ -9,7 +9,8 @@ Run: uv run python examples/05_control_engineering.py
 """
 
 import sympy
-from symproof import Axiom, AxiomSet, seal
+
+from symproof import Axiom, AxiomSet, seal, unevaluated
 from symproof.library.control import (
     closed_loop_stability,
     lyapunov_from_system,
@@ -28,13 +29,16 @@ s = sympy.Symbol("s")
 Kp = sympy.Symbol("Kp", positive=True)
 Kd = sympy.Symbol("Kd", positive=True)
 
-pd_axioms = AxiomSet(
-    name="pd_controller",
-    axioms=(
-        Axiom(name="Kp_pos", expr=Kp > 0),
-        Axiom(name="Kd_pos", expr=Kd > 0),
-    ),
-)
+# Use unevaluated() to keep axiom expressions structural.
+# Without it, Kp > 0 would collapse to True (Kp has positive=True).
+with unevaluated():
+    pd_axioms = AxiomSet(
+        name="pd_controller",
+        axioms=(
+            Axiom(name="Kp_pos", expr=Kp > 0),
+            Axiom(name="Kd_pos", expr=Kd > 0),
+        ),
+    )
 
 stability = closed_loop_stability(
     pd_axioms,
@@ -61,13 +65,14 @@ c = sympy.Symbol("c", positive=True)
 
 A = sympy.Matrix([[0, 1], [-k, -c]])
 
-lyap_axioms = AxiomSet(
-    name="oscillator",
-    axioms=(
-        Axiom(name="k_pos", expr=k > 0),
-        Axiom(name="c_pos", expr=c > 0),
-    ),
-)
+with unevaluated():
+    lyap_axioms = AxiomSet(
+        name="oscillator",
+        axioms=(
+            Axiom(name="k_pos", expr=k > 0),
+            Axiom(name="c_pos", expr=c > 0),
+        ),
+    )
 
 lyap_bundle = lyapunov_from_system(lyap_axioms, A)
 

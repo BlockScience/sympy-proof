@@ -341,18 +341,46 @@ def latex_bundle(bundle: ProofBundle) -> str:
     )
     lines.append("")
 
-    # Axioms
+    # Axioms — grouped by provenance
     ax = bundle.axiom_set
+    posited = [a for a in ax.axioms if not a.inherited]
+    inherited = [a for a in ax.axioms if a.inherited]
+
     lines.append(rf"\subsection*{{Axioms: {_escape(ax.name)}}}")
-    lines.append(r"\begin{enumerate}")
-    for axiom in ax.axioms:
-        name = _escape(axiom.name)
-        fallback = axiom.description or axiom.name
-        expr_tex = _expr_or_fallback(axiom.expr, fallback)
-        lines.append(rf"  \item \textbf{{{name}}}: ${expr_tex}$")
-        if axiom.description and axiom.expr is not sympy.true:
-            lines.append(rf"    \par {_escape(axiom.description)}")
-    lines.append(r"\end{enumerate}")
+
+    if posited:
+        lines.append(r"\paragraph{Posited (design choices)}")
+        lines.append(r"\begin{enumerate}")
+        for axiom in posited:
+            name = _escape(axiom.name)
+            fallback = axiom.description or axiom.name
+            expr_tex = _expr_or_fallback(axiom.expr, fallback)
+            lines.append(rf"  \item \textbf{{{name}}}: ${expr_tex}$")
+            if axiom.description and axiom.expr is not sympy.true:
+                lines.append(rf"    \par {_escape(axiom.description)}")
+        lines.append(r"\end{enumerate}")
+
+    if inherited:
+        lines.append(r"\paragraph{Inherited (from foundation proofs)}")
+        lines.append(
+            r"\emph{These conditions were not chosen by the proof "
+            r"author --- they are required by external results the "
+            r"proof depends on.}"
+        )
+        lines.append(r"\begin{enumerate}")
+        for axiom in inherited:
+            name = _escape(axiom.name)
+            fallback = axiom.description or axiom.name
+            expr_tex = _expr_or_fallback(axiom.expr, fallback)
+            lines.append(rf"  \item \textbf{{{name}}}: ${expr_tex}$")
+            if axiom.citation:
+                lines.append(
+                    rf"    \par \emph{{Source:}} "
+                    rf"{_escape(axiom.citation.source)}"
+                )
+            if axiom.description and axiom.expr is not sympy.true:
+                lines.append(rf"    \par {_escape(axiom.description)}")
+        lines.append(r"\end{enumerate}")
     lines.append("")
 
     # Hypothesis

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import sympy
 
-from symproof.evaluation import evaluation
+from symproof.evaluation import evaluation, unevaluated
 from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof
 from symproof.models import (
     AxiomSet,
@@ -140,16 +140,18 @@ def _assumption_covered_by_axiom(
     have already been simplified to True.  In that case, we check
     whether the symbol's name appears in the axiom name as a fallback.
     """
-    # Build expected expressions using BOTH the actual symbol (for eager-eval
-    # matching) and a bare symbol (for structural matching)
+    # Build expected expressions using BOTH the actual symbol (for axioms
+    # built under unevaluated()) and a bare symbol (for structural matching).
+    # Must build under unevaluated() to prevent eager collapse.
     bare = sympy.Symbol(sym.name)
-    expected_map = {
-        "positive": (sym > 0, bare > 0),
-        "nonnegative": (sym >= 0, bare >= 0),
-        "negative": (sym < 0, bare < 0),
-        "nonpositive": (sym <= 0, bare <= 0),
-        "nonzero": (sympy.Ne(sym, 0), sympy.Ne(bare, 0)),
-    }
+    with unevaluated():
+        expected_map = {
+            "positive": (sym > 0, bare > 0),
+            "nonnegative": (sym >= 0, bare >= 0),
+            "negative": (sym < 0, bare < 0),
+            "nonpositive": (sym <= 0, bare <= 0),
+            "nonzero": (sympy.Ne(sym, 0), sympy.Ne(bare, 0)),
+        }
     pair = expected_map.get(assumption)
     if pair is None:
         return True  # integer, real, etc. — not expressible as axiom, skip
@@ -168,12 +170,16 @@ def _assumption_covered_by_axiom(
     # The bare form gives "StrictGreaterThan(Symbol('R_x'), Integer(0))".
     # We need to check both.
     bare_srepr = canonical_srepr(expected_bare)
+    # Also match against the form built with the assumed symbol,
+    # for axioms constructed under unevaluated() which preserve
+    # the assumed symbol in the expression tree.
+    assumed_srepr = canonical_srepr(expected_with_sym)
 
     for axiom in axiom_set.axioms:
         ax_srepr = canonical_srepr(axiom.expr)
 
-        # Direct match (bare form)
-        if ax_srepr == bare_srepr:
+        # Direct match (bare form or assumed-symbol form)
+        if ax_srepr == bare_srepr or ax_srepr == assumed_srepr:
             return True
 
         # Skip True axioms for implication checks (can't imply anything)

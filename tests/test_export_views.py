@@ -381,3 +381,77 @@ class TestAllViewsConsistent:
         # Both should reference the same hash
         assert euler_bundle.bundle_hash[:16] in tex
         assert bundle_node["hash"] == euler_bundle.bundle_hash
+
+
+# ---------------------------------------------------------------------------
+# Inherited axiom rendering in graph views
+# ---------------------------------------------------------------------------
+
+
+class TestGraphInheritedAxioms:
+    """Verify graph DAG includes inherited axiom metadata."""
+
+    @pytest.fixture
+    def inherited_bundle(self):
+        from symproof import Citation
+
+        x = sympy.Symbol("x")
+        axioms = AxiomSet(
+            name="mixed",
+            axioms=(
+                Axiom(name="x_pos", expr=x > 0),
+                Axiom(
+                    name="ext",
+                    expr=sympy.S.true,
+                    inherited=True,
+                    citation=Citation(source="Test Source 2024"),
+                ),
+            ),
+        )
+        h = axioms.hypothesis("h", expr=x > 0)
+        script = (
+            ProofBuilder(axioms, h.name, name="p", claim="c")
+            .lemma(
+                "l",
+                LemmaKind.QUERY,
+                expr=sympy.Q.positive(x),
+                assumptions={"x": {"positive": True}},
+            )
+            .build()
+        )
+        return seal(axioms, h, script)
+
+    def test_dag_has_axiom_metadata(self, inherited_bundle):
+        dag = proof_dag(inherited_bundle)
+        bundle_node = [n for n in dag["nodes"] if n["type"] == "bundle"][0]
+        assert "axioms" in bundle_node
+        assert len(bundle_node["axioms"]) == 2
+
+    def test_dag_inherited_count(self, inherited_bundle):
+        dag = proof_dag(inherited_bundle)
+        bundle_node = [n for n in dag["nodes"] if n["type"] == "bundle"][0]
+        assert bundle_node["posited_axiom_count"] == 1
+        assert bundle_node["inherited_axiom_count"] == 1
+
+    def test_dag_axiom_citation(self, inherited_bundle):
+        dag = proof_dag(inherited_bundle)
+        bundle_node = [n for n in dag["nodes"] if n["type"] == "bundle"][0]
+        inherited_ax = [a for a in bundle_node["axioms"] if a["inherited"]][0]
+        assert inherited_ax["citation"] == "Test Source 2024"
+
+    def test_dag_posited_no_citation(self, inherited_bundle):
+        dag = proof_dag(inherited_bundle)
+        bundle_node = [n for n in dag["nodes"] if n["type"] == "bundle"][0]
+        posited_ax = [a for a in bundle_node["axioms"] if not a["inherited"]][0]
+        assert posited_ax["citation"] is None
+
+    def test_mermaid_shows_inherited_count(self, inherited_bundle):
+        mmd = proof_dag_mermaid(inherited_bundle)
+        assert "inherited" in mmd.lower()
+
+    def test_json_includes_axiom_metadata(self, inherited_bundle):
+        jsn = proof_dag_json(inherited_bundle)
+        data = json.loads(jsn)
+        bundle_node = [n for n in data["nodes"] if n["type"] == "bundle"][0]
+        assert "axioms" in bundle_node
+        assert any(a["inherited"] for a in bundle_node["axioms"])
