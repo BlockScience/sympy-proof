@@ -62,6 +62,7 @@ from sympy import Integer, Rational, Symbol, ceiling, floor
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import seal
+from symproof.evaluation import evaluation
 from symproof.models import AxiomSet, Lemma, LemmaKind, ProofBundle
 
 # ===================================================================
@@ -195,13 +196,15 @@ class RoundingStep:
     @property
     def uses_floor(self) -> bool:
         """True if ``rounded <= exact`` (floor-style rounding)."""
-        diff = sympy.simplify(self.exact - self.rounded)
+        with evaluation():
+            diff = sympy.simplify(self.exact - self.rounded)
         return diff.is_nonnegative is True  # type: ignore[return-value]
 
     @property
     def uses_ceil(self) -> bool:
         """True if ``rounded >= exact`` (ceil-style rounding)."""
-        diff = sympy.simplify(self.rounded - self.exact)
+        with evaluation():
+            diff = sympy.simplify(self.rounded - self.exact)
         return diff.is_nonnegative is True  # type: ignore[return-value]
 
     @property
@@ -315,9 +318,10 @@ def directional_chain_error(
     total_error = sum(
         step.error for step in steps
     )  # type: ignore[arg-type]
-    net_is_safe = sympy.simplify(
-        sympy.Ge(total_error, Integer(0))
-    ) is sympy.true
+    with evaluation():
+        net_is_safe = sympy.simplify(
+            sympy.Ge(total_error, Integer(0))
+        ) is sympy.true
     if not net_is_safe and "NEGATIVE" not in net_lemma.description:
         # Replace the net lemma with DeFi-specific description
         lemmas[-1] = Lemma(
@@ -579,11 +583,13 @@ class DecimalAwarePool:
         naive = self.naive_swap_x_for_y(dx)
         # The ratio correct/naive should equal norm_x_to_y when
         # the constant-product terms cancel.  We prove the difference.
+        with evaluation():
+            _mismatch_simplified = sympy.simplify(correct - naive)
         return Lemma(
             name=name,
             kind=LemmaKind.EQUALITY,
-            expr=sympy.simplify(correct - naive),
-            expected=sympy.simplify(correct - naive),
+            expr=_mismatch_simplified,
+            expected=_mismatch_simplified,
             description="Correct (normalized) - naive swap output "
             f"(X:{self.decimals_x} dec, Y:{self.decimals_y} dec)",
         )

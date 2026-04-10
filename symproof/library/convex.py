@@ -23,6 +23,7 @@ import sympy
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import seal
+from symproof.evaluation import evaluation
 from symproof.models import AxiomSet, LemmaKind, ProofBundle
 
 # ===================================================================
@@ -51,7 +52,8 @@ def convex_scalar(
         Symbol assumptions for the nonnegativity check.
     """
     asm = assumptions or {}
-    f_pp = sympy.simplify(sympy.diff(f, x, 2))
+    with evaluation():
+        f_pp = sympy.simplify(sympy.diff(f, x, 2))
 
     hyp = axiom_set.hypothesis(
         "scalar_convex",
@@ -120,7 +122,8 @@ def convex_hessian(
     )
 
     for k in range(1, n + 1):
-        minor = sympy.simplify(H[:k, :k].det())
+        with evaluation():
+            minor = sympy.simplify(H[:k, :k].det())
         builder = builder.lemma(
             f"minor_{k}_nonneg",
             LemmaKind.QUERY,
@@ -191,7 +194,8 @@ def strongly_convex(
     )
 
     for k in range(1, n + 1):
-        minor = sympy.simplify(H_shifted[:k, :k].det())
+        with evaluation():
+            minor = sympy.simplify(H_shifted[:k, :k].det())
         builder = builder.lemma(
             f"shifted_minor_{k}_nonneg",
             LemmaKind.QUERY,
@@ -247,14 +251,18 @@ def conjugate_function(
     x_star = x_star_solutions[0]
 
     # f*(y) = x* y - f(x*)
-    f_conj = sympy.simplify(x_star * y - f.subs(x, x_star))
-    f_conj_pp = sympy.simplify(sympy.diff(f_conj, y, 2))
+    with evaluation():
+        f_conj = sympy.simplify(x_star * y - f.subs(x, x_star))
+        f_conj_pp = sympy.simplify(sympy.diff(f_conj, y, 2))
 
     hyp = axiom_set.hypothesis(
         "conjugate_convex",
         expr=sympy.Ge(f_conj_pp, 0),
         description=f"f*(y) = {f_conj} is convex",
     )
+    with evaluation():
+        _conj_foc_simplified = sympy.simplify(foc.subs(x, x_star))
+
     script = (
         ProofBuilder(
             axiom_set, hyp.name,
@@ -264,7 +272,7 @@ def conjugate_function(
         .lemma(
             "foc_solution",
             LemmaKind.EQUALITY,
-            expr=sympy.simplify(foc.subs(x, x_star)),
+            expr=_conj_foc_simplified,
             expected=sympy.Integer(0),
             description=f"FOC: y - f'(x*) = 0 at x* = {x_star}",
         )
@@ -336,7 +344,8 @@ def convex_sum(
         for i, (w, f) in enumerate(
             zip(weights, functions, strict=True)
         ):
-            term_pp = sympy.simplify(w * sympy.diff(f, x, 2))
+            with evaluation():
+                term_pp = sympy.simplify(w * sympy.diff(f, x, 2))
             builder = builder.lemma(
                 f"term_{i}_convex",
                 LemmaKind.QUERY,
@@ -361,7 +370,8 @@ def convex_sum(
             claim="Weighted sum Hessian PSD",
         )
         for k in range(1, n + 1):
-            minor = sympy.simplify(H[:k, :k].det())
+            with evaluation():
+                minor = sympy.simplify(H[:k, :k].det())
             builder = builder.lemma(
                 f"sum_minor_{k}",
                 LemmaKind.QUERY,
@@ -417,13 +427,15 @@ def convex_composition(
     asm = assumptions or {}
     t = outer_var
 
-    f_p = sympy.simplify(sympy.diff(f_outer, t))
-    f_pp = sympy.simplify(sympy.diff(f_outer, t, 2))
-    g_pp = sympy.simplify(sympy.diff(g_inner, inner_var, 2))
+    with evaluation():
+        f_p = sympy.simplify(sympy.diff(f_outer, t))
+        f_pp = sympy.simplify(sympy.diff(f_outer, t, 2))
+        g_pp = sympy.simplify(sympy.diff(g_inner, inner_var, 2))
 
     # The composed function
     h = f_outer.subs(t, g_inner)
-    h_pp = sympy.simplify(sympy.diff(h, inner_var, 2))
+    with evaluation():
+        h_pp = sympy.simplify(sympy.diff(h, inner_var, 2))
 
     hyp = axiom_set.hypothesis(
         "composition_convex",
@@ -569,14 +581,16 @@ def gp_to_convex(
     asm = assumptions or {}
 
     # Transform each monomial: substitute x = exp(y)
-    transformed = [
-        sympy.simplify(term.subs(orig_var, sympy.exp(log_var)))
-        for term in monomial_terms
-    ]
+    with evaluation():
+        transformed = [
+            sympy.simplify(term.subs(orig_var, sympy.exp(log_var)))
+            for term in monomial_terms
+        ]
 
     # Log of the posynomial: log(sum(transformed))
     posynomial_log = sympy.log(sum(transformed))
-    lse_pp = sympy.simplify(sympy.diff(posynomial_log, log_var, 2))
+    with evaluation():
+        lse_pp = sympy.simplify(sympy.diff(posynomial_log, log_var, 2))
 
     hyp = axiom_set.hypothesis(
         "gp_convex",

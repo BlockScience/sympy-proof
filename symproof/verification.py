@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sympy
 
+from symproof.evaluation import evaluation
 from symproof.hashing import hash_proof
 from symproof.models import (
     Lemma,
@@ -216,7 +217,17 @@ def verify_lemma(lemma: Lemma) -> LemmaResult:
         ``sympy.simplify(expr) is sympy.true``.
     QUERY
         ``sympy.ask(expr, context)`` is ``True`` under stated assumptions.
+
+    All evaluation (simplify, ask, refine) happens inside an explicit
+    ``evaluation()`` gate.  Expressions may have been constructed under
+    ``unevaluated()`` and need full evaluation here.
     """
+    with evaluation():
+        return _verify_lemma_impl(lemma)
+
+
+def _verify_lemma_impl(lemma: Lemma) -> LemmaResult:
+    """Implementation of verify_lemma, called under evaluation() context."""
     try:
         assumption_subs = _build_assumption_subs(lemma.assumptions)
         expr_with_assumptions = lemma.expr.subs(assumption_subs)

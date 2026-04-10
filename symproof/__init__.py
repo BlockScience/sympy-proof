@@ -4,6 +4,7 @@ __version__ = "0.1.0"
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import ContradictionError, check_consistency, disprove, seal
+from symproof.evaluation import evaluation, unevaluated
 from symproof.composite import (
     CompositeType,
     FixedPointType,
@@ -59,6 +60,7 @@ __all__ = [
     "canonical_srepr",
     "check_consistency",
     "disprove",
+    "evaluation",
     "hash_axiom_set",
     "hash_bundle",
     "hash_disproof",
@@ -71,6 +73,7 @@ __all__ = [
     "try_implication",
     "try_query",
     "try_simplify",
+    "unevaluated",
     "verify_lemma",
     "verify_proof",
 ]

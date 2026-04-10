@@ -22,6 +22,7 @@ import sympy
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import seal
+from symproof.evaluation import evaluation
 from symproof.models import AxiomSet, LemmaKind, ProofBundle
 
 # ===================================================================
@@ -217,7 +218,8 @@ def lyapunov_stability(
     # Verify each entry of the residual matrix is zero
     for i in range(n):
         for j in range(n):
-            entry = sympy.simplify(L[i, j])
+            with evaluation():
+                entry = sympy.simplify(L[i, j])
             builder = builder.lemma(
                 f"L_{i}{j}_zero",
                 LemmaKind.EQUALITY,
@@ -272,8 +274,9 @@ def controllability_rank(
     C_mat = sympy.Matrix.hstack(*blocks)
 
     # Gramian: C * C^T (n x n, full rank iff nonsingular)
-    gramian = sympy.simplify(C_mat * C_mat.T)
-    gram_det = sympy.simplify(gramian.det())
+    with evaluation():
+        gramian = sympy.simplify(C_mat * C_mat.T)
+        gram_det = sympy.simplify(gramian.det())
 
     hyp = axiom_set.hypothesis(
         "controllable",
@@ -332,8 +335,9 @@ def observability_rank(
         blocks.append(C * Ak)
     O_mat = sympy.Matrix.vstack(*blocks)
 
-    gramian = sympy.simplify(O_mat.T * O_mat)
-    gram_det = sympy.simplify(gramian.det())
+    with evaluation():
+        gramian = sympy.simplify(O_mat.T * O_mat)
+        gram_det = sympy.simplify(gramian.det())
 
     hyp = axiom_set.hypothesis(
         "observable",
@@ -395,7 +399,8 @@ def quadratic_invariant(
         sympy.diff(V, xi) * fi
         for xi, fi in zip(state_symbols, state_dots, strict=True)
     )
-    V_dot_simplified = sympy.simplify(V_dot)
+    with evaluation():
+        V_dot_simplified = sympy.simplify(V_dot)
 
     hyp = axiom_set.hypothesis(
         "quadratic_invariant",
@@ -551,7 +556,8 @@ def lyapunov_from_system(
         )
 
     P_solved = P_sym.subs(solution)
-    P_simplified = sympy.simplify(P_solved)
+    with evaluation():
+        P_simplified = sympy.simplify(P_solved)
 
     # Build proof: Lyapunov equation + positive definiteness
     hyp = axiom_set.hypothesis(
@@ -574,7 +580,8 @@ def lyapunov_from_system(
     L = A.T * P_simplified + P_simplified * A + Q
     for i in range(n):
         for j in range(n):
-            entry = sympy.simplify(L[i, j])
+            with evaluation():
+                entry = sympy.simplify(L[i, j])
             builder = builder.lemma(
                 f"lyap_eq_{i}{j}",
                 LemmaKind.EQUALITY,
@@ -587,7 +594,8 @@ def lyapunov_from_system(
     # Sylvester's criterion: all leading principal minors > 0
     for k in range(1, n + 1):
         minor = P_simplified[:k, :k].det()
-        minor_simplified = sympy.simplify(minor)
+        with evaluation():
+            minor_simplified = sympy.simplify(minor)
         builder = builder.lemma(
             f"P_minor_{k}_positive",
             LemmaKind.QUERY,

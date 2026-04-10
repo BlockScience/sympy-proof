@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import sympy
 
+from symproof.evaluation import evaluation
 from symproof.hashing import hash_axiom_set, hash_bundle, hash_disproof
 from symproof.models import (
     AxiomSet,
@@ -48,7 +49,8 @@ def _check_assumptions_consistent(
         context = _build_q_context(lemma.assumptions)
         for axiom in axiom_set.axioms:
             try:
-                result = sympy.ask(sympy.Q.is_true(axiom.expr), context)
+                with evaluation():
+                    result = sympy.ask(sympy.Q.is_true(axiom.expr), context)
             except (TypeError, ValueError, RecursionError, AttributeError):
                 continue
             if result is False:
@@ -180,9 +182,10 @@ def _assumption_covered_by_axiom(
 
         # Check if axiom expression implies the assumption
         try:
-            implied = sympy.simplify(
-                sympy.Implies(axiom.expr, expected_bare)
-            )
+            with evaluation():
+                implied = sympy.simplify(
+                    sympy.Implies(axiom.expr, expected_bare)
+                )
             if implied is sympy.S.true:
                 return True
         except (TypeError, RecursionError, AttributeError):
@@ -314,7 +317,8 @@ def _check_axiom_consistency(axiom_set: AxiomSet) -> None:
     for i, a1 in enumerate(checkable):
         for a2 in checkable[i + 1 :]:
             try:
-                combined = sympy.simplify(sympy.And(a1.expr, a2.expr))
+                with evaluation():
+                    combined = sympy.simplify(sympy.And(a1.expr, a2.expr))
                 if combined is sympy.S.false:
                     raise ValueError(
                         f"Axioms '{a1.name}' and '{a2.name}' are mutually "
@@ -560,7 +564,9 @@ def check_consistency(
     expr_b = bundle_not_h.hypothesis.expr
 
     # Check if one is the negation of the other
-    if sympy.simplify(sympy.And(expr_a, expr_b)) is sympy.false:
+    with evaluation():
+        and_result = sympy.simplify(sympy.And(expr_a, expr_b))
+    if and_result is sympy.false:
         raise ContradictionError(
             f"Contradiction detected under axiom set "
             f"{bundle_h.axiom_set.name!r}: both "
@@ -572,10 +578,12 @@ def check_consistency(
     # Also check via structural Not equivalence
     neg_b = sympy.Not(expr_b)
     neg_a = sympy.Not(expr_a)
-    if (
-        sympy.simplify(sympy.Equivalent(expr_a, neg_b)) is sympy.true
-        or sympy.simplify(sympy.Equivalent(neg_a, expr_b)) is sympy.true
-    ):
+    with evaluation():
+        equiv_check = (
+            sympy.simplify(sympy.Equivalent(expr_a, neg_b)) is sympy.true
+            or sympy.simplify(sympy.Equivalent(neg_a, expr_b)) is sympy.true
+        )
+    if equiv_check:
         raise ContradictionError(
             f"Contradiction detected under axiom set "
             f"{bundle_h.axiom_set.name!r}: "

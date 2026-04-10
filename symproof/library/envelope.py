@@ -22,6 +22,7 @@ import sympy
 
 from symproof.builder import ProofBuilder
 from symproof.bundle import seal
+from symproof.evaluation import evaluation
 from symproof.models import AxiomSet, LemmaKind, ProofBundle
 
 
@@ -87,14 +88,16 @@ def envelope_theorem(
     x_star = x_star_solutions[0]
 
     # ── Step 2: Concavity ──────────────────────────────────────
-    f_xx = sympy.simplify(sympy.diff(f, x, 2))
+    with evaluation():
+        f_xx = sympy.simplify(sympy.diff(f, x, 2))
 
     # ── Step 3: Max-value function and envelope ────────────────
-    V = sympy.simplify(f.subs(x, x_star))
-    dV_dtheta = sympy.simplify(sympy.diff(V, theta))
-    partial_f_theta_at_star = sympy.simplify(
-        sympy.diff(f, theta).subs(x, x_star)
-    )
+    with evaluation():
+        V = sympy.simplify(f.subs(x, x_star))
+        dV_dtheta = sympy.simplify(sympy.diff(V, theta))
+        partial_f_theta_at_star = sympy.simplify(
+            sympy.diff(f, theta).subs(x, x_star)
+        )
 
     # ── Hypothesis ─────────────────────────────────────────────
     hyp = axiom_set.hypothesis(
@@ -107,6 +110,9 @@ def envelope_theorem(
     )
 
     # ── Proof script ───────────────────────────────────────────
+    with evaluation():
+        _foc_simplified = sympy.simplify(f_x.subs(x, x_star))
+
     script = (
         ProofBuilder(
             axiom_set,
@@ -121,7 +127,7 @@ def envelope_theorem(
         .lemma(
             "foc_solution",
             LemmaKind.EQUALITY,
-            expr=sympy.simplify(f_x.subs(x, x_star)),
+            expr=_foc_simplified,
             expected=sympy.Integer(0),
             description=f"FOC: df/d{x} = 0 at {x} = {x_star}.",
         )

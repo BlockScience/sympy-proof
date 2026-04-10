@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import sympy
 
+from symproof.evaluation import evaluation
 from symproof.models import Lemma, LemmaKind
 from symproof.verification import _build_assumption_subs, _build_q_context
 
@@ -39,7 +40,8 @@ def try_simplify(
         if assumptions:
             subs = _build_assumption_subs(assumptions)
             expr = expr.subs(subs)
-        result = sympy.simplify(expr)
+        with evaluation():
+            result = sympy.simplify(expr)
         if result is sympy.true:
             return True
         if result is sympy.false:
@@ -63,7 +65,8 @@ def try_simplify(
         if isinstance(expr, sympy.Implies):
             try:
                 ante, cons = expr.args[0], expr.args[1]
-                negated = sympy.simplify(sympy.And(ante, sympy.Not(cons)))
+                with evaluation():
+                    negated = sympy.simplify(sympy.And(ante, sympy.Not(cons)))
                 if negated is sympy.false:
                     return True
             except (TypeError, ValueError, RecursionError, AttributeError):
@@ -138,7 +141,8 @@ def auto_lemma(
             subs = _build_assumption_subs(asm) if asm else {}
             expr_sub = expr.subs(subs) if subs else expr
             expected_sub = expected.subs(subs) if subs else expected
-            diff = sympy.simplify(expr_sub - expected_sub)
+            with evaluation():
+                diff = sympy.simplify(expr_sub - expected_sub)
             if diff == sympy.Integer(0):
                 return Lemma(
                     name=name,
@@ -149,7 +153,9 @@ def auto_lemma(
                     description=description,
                 )
             evaluated = expr_sub.doit()
-            if sympy.simplify(evaluated - expected_sub) == sympy.Integer(0):
+            with evaluation():
+                doit_match = sympy.simplify(evaluated - expected_sub) == sympy.Integer(0)
+            if doit_match:
                 return Lemma(
                     name=name,
                     kind=LemmaKind.EQUALITY,
@@ -313,7 +319,8 @@ def signed_sum_lemmas(
         else sympy.Le(total, sympy.Integer(0))
     )
     direction = ">= 0" if net_nonneg else "<= 0"
-    net_ok = sympy.simplify(net_expr) is sympy.true
+    with evaluation():
+        net_ok = sympy.simplify(net_expr) is sympy.true
     warning = "" if net_ok else (
         f" ⚠ NET {'NEGATIVE' if net_nonneg else 'POSITIVE'}"
         f" — sum violates required direction!"

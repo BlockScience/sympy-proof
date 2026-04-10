@@ -15,6 +15,7 @@ from typing import Any, Self
 import sympy
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from symproof.evaluation import evaluation
 from symproof.serialization import make_canonical_dict
 from symproof.types import SympyBoolean, SympyExpr  # noqa: TC001
 
@@ -108,19 +109,20 @@ class AxiomSet(BaseModel):
         ``sympy.false``.  Complex contradictions may slip through and are
         caught later by the pairwise consistency check in ``seal()``.
         """
-        for axiom in self.axioms:
-            if axiom.expr is sympy.S.true:
-                continue  # external results — cannot check
-            try:
-                simplified = sympy.simplify(axiom.expr)
-                if simplified is sympy.S.false:
-                    raise ValueError(
-                        f"Axiom '{axiom.name}' is provably false: "
-                        f"simplify({axiom.expr}) returned False. "
-                        f"A false axiom corrupts all downstream proofs."
-                    )
-            except (TypeError, RecursionError, AttributeError):
-                continue  # cannot determine — let it pass
+        with evaluation():
+            for axiom in self.axioms:
+                if axiom.expr is sympy.S.true:
+                    continue  # external results — cannot check
+                try:
+                    simplified = sympy.simplify(axiom.expr)
+                    if simplified is sympy.S.false:
+                        raise ValueError(
+                            f"Axiom '{axiom.name}' is provably false: "
+                            f"simplify({axiom.expr}) returned False. "
+                            f"A false axiom corrupts all downstream proofs."
+                        )
+                except (TypeError, RecursionError, AttributeError):
+                    continue  # cannot determine — let it pass
         return self
 
     def canonical_dict(self) -> dict:
