@@ -346,6 +346,20 @@ class LemmaKind(StrEnum):
     structured data, not buried in a description string.
     """
 
+    INFERENCE = "inference"
+    """Draw a logical conclusion from prior lemmas or imported bundles.
+
+    ``depends_on`` lists the premises (required, must be non-empty).
+    ``rule`` names the theorem or principle applied (required, non-empty).
+    ``description`` states the conclusion in human-readable form.
+    ``expr`` is ``sympy.S.true`` (the conclusion is not a SymPy expression).
+
+    Verification checks structural validity: non-empty ``depends_on``
+    and non-empty ``rule``.  The inference itself is justified by the
+    named rule, not mechanically verified — this is honest about what
+    the framework can and cannot check.
+    """
+
     COORDINATE_TRANSFORM = "coordinate_transform"
     """Transform → prove in new coordinates → verify round-trip.
 
@@ -391,6 +405,14 @@ class Lemma(BaseModel):
     E.g., ``"is_open"``, ``"is_closed"``, ``"is_subset"``.
     Verification evaluates ``getattr(expr, property_name)`` and checks
     the result is truthy.  Only used when ``kind == PROPERTY``.
+    """
+
+    rule: str = ""
+    """Theorem or principle applied for ``INFERENCE`` lemmas.
+
+    E.g., ``"Heine-Borel"``, ``"LP strong duality"``,
+    ``"maximum entropy implies no leakage"``.
+    Required when ``kind == INFERENCE``.
     """
 
     depends_on: list[str] = []
@@ -507,6 +529,7 @@ class ProofScript(BaseModel):
                     ),
                     "depends_on": lem.depends_on,
                     "property_name": lem.property_name,
+                    "rule": lem.rule,
                     "description": lem.description,
                 }
                 for lem in self.lemmas
@@ -546,6 +569,7 @@ class ProofScript(BaseModel):
                     ),
                     depends_on=ld.get("depends_on", []),
                     property_name=ld.get("property_name", ""),
+                    rule=ld.get("rule", ""),
                     description=ld.get("description", ""),
                 )
             )

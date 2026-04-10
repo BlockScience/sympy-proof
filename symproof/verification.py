@@ -401,6 +401,31 @@ def _verify_lemma_impl(lemma: Lemma) -> LemmaResult:
                 advisories=tuple(advisories),
             )
 
+        if lemma.kind == LemmaKind.INFERENCE:
+            rule = lemma.rule
+            deps = lemma.depends_on
+            errors = []
+            if not deps:
+                errors.append(
+                    "INFERENCE lemma requires non-empty depends_on "
+                    "(must cite premises)."
+                )
+            if not rule:
+                errors.append(
+                    "INFERENCE lemma requires non-empty rule "
+                    "(must name the theorem or principle applied)."
+                )
+            passed = len(errors) == 0
+            advisories.extend(errors)
+
+            return LemmaResult(
+                lemma_name=lemma.name,
+                passed=passed,
+                actual_value=sympy.true if passed else sympy.false,
+                error="; ".join(errors) if errors else None,
+                advisories=tuple(advisories),
+            )
+
         if lemma.kind == LemmaKind.COORDINATE_TRANSFORM:
             if lemma.transform is None or lemma.inverse_transform is None:
                 return LemmaResult(

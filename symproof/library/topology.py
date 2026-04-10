@@ -219,10 +219,11 @@ def verify_compact(
         )
         .lemma(
             "heine_borel",
-            LemmaKind.BOOLEAN,
+            LemmaKind.INFERENCE,
             expr=sympy.S.true,
             depends_on=["is_closed", "is_bounded"],
-            description="Heine-Borel: closed + bounded in R => compact",
+            rule="Heine-Borel theorem",
+            description="Closed + bounded in R => compact",
         )
         .build()
     )

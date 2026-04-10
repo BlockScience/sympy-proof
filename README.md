@@ -39,7 +39,7 @@ The [satellite ADCS example](symproof/library/examples/control/04_composition.py
 
 ### What symproof proves (validation)
 
-- A Lyapunov function exists (the linear model is actually stable)
+- A Lyapunov function exists (the model is actually stable)
 - The characteristic polynomial is Hurwitz (all roots in the left half-plane)
 - Rounding error is bounded AND accumulates in the correct direction
 - Intermediate products don't overflow machine word sizes

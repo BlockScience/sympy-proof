@@ -458,12 +458,11 @@ def lp_optimal(
         .import_bundle(duality_bundle)
         .lemma(
             "optimality_conclusion",
-            LemmaKind.BOOLEAN,
+            LemmaKind.INFERENCE,
             expr=sympy.S.true,
-            description=(
-                "Primal feasible + dual feasible + zero duality gap "
-                "=> x* is optimal (LP strong duality theorem)."
-            ),
+            depends_on=["primal_feasible", "dual_feasible", "strong_duality"],
+            rule="LP strong duality theorem",
+            description="Primal feasible + dual feasible + zero duality gap => x* is optimal.",
         )
         .build()
     )

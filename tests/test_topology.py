@@ -106,6 +106,62 @@ class TestIntermediateValue:
             intermediate_value(_EMPTY, x**2 + 1, x, 0, 1, 0)
 
 
+class TestInferenceLemmaKind:
+    """Test the INFERENCE verification strategy."""
+
+    def test_inference_with_rule_and_deps(self):
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="conclusion",
+            kind=LemmaKind.INFERENCE,
+            expr=sympy.S.true,
+            depends_on=["premise_a", "premise_b"],
+            rule="Modus ponens",
+            description="A and A->B therefore B",
+        )
+        result = verify_lemma(lem)
+        assert result.passed
+
+    def test_inference_without_deps_fails(self):
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="bad",
+            kind=LemmaKind.INFERENCE,
+            expr=sympy.S.true,
+            depends_on=[],
+            rule="Some rule",
+        )
+        result = verify_lemma(lem)
+        assert not result.passed
+
+    def test_inference_without_rule_fails(self):
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="bad",
+            kind=LemmaKind.INFERENCE,
+            expr=sympy.S.true,
+            depends_on=["something"],
+            rule="",
+        )
+        result = verify_lemma(lem)
+        assert not result.passed
+
+    def test_heine_borel_uses_inference(self):
+        """verify_compact produces an INFERENCE lemma for Heine-Borel."""
+        from symproof.models import LemmaKind
+        bundle = verify_compact(_EMPTY, sympy.Interval(0, 1))
+        hb = [l for l in bundle.proof.lemmas if l.name == "heine_borel"]
+        assert len(hb) == 1
+        assert hb[0].kind == LemmaKind.INFERENCE
+        assert hb[0].rule == "Heine-Borel theorem"
+
+
 class TestPropertyLemmaKind:
     """Test the new PROPERTY verification strategy."""
 

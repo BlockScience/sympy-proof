@@ -116,8 +116,10 @@ xor_bundle = seal(
     .import_bundle(xor_entropy)
     .lemma(
         "max_entropy_no_leakage",
-        LemmaKind.BOOLEAN,
-        expr=sympy.Eq(sympy.Integer(1), sympy.Integer(1)),
+        LemmaKind.INFERENCE,
+        expr=sympy.S.true,
+        depends_on=["truth_table_matches", "entropy_computed"],
+        rule="Maximum entropy implies uniform output distribution",
         description=(
             "H = 1 bit = log2(2) = maximum for binary output.  "
             "Under uniform inputs, the output distribution is uniform, "
@@ -166,8 +168,10 @@ and_bundle = seal(
     .import_bundle(and_entropy)
     .lemma(
         "biased_output_leaks",
-        LemmaKind.BOOLEAN,
+        LemmaKind.INFERENCE,
         expr=sympy.S.true,
+        depends_on=["truth_table_matches", "entropy_computed"],
+        rule="Sub-maximum entropy implies biased output distribution",
         description=(
             "H < 1 bit.  Output is biased toward False.  "
             "Observing True is informative: it reveals both inputs were True."

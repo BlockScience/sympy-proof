@@ -136,6 +136,7 @@ _KIND_LABELS: dict[str, str] = {
     "boolean": "boolean",
     "query": "query",
     "property": "property",
+    "inference": "inference",
     "coordinate_transform": "coordinate transform",
 }
 
@@ -173,7 +174,12 @@ def latex_lemma(
     )
 
     # Main expression
-    if lemma.property_name:
+    if lemma.rule:
+        # INFERENCE: show the rule being applied
+        lines.append(
+            rf"  \emph{{Rule:}} {_escape(lemma.rule)}"
+        )
+    elif lemma.property_name:
         # PROPERTY: show "subject.property_name" for readability
         lines.append(
             rf"  $\displaystyle {_expr_tex(lemma.expr)}$"
