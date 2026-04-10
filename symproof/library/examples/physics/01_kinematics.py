@@ -23,27 +23,20 @@ Run: uv run python -m symproof.library.examples.physics.01_kinematics
 
 import sympy
 
-from symproof import Axiom, AxiomSet
+from symproof import AxiomSet
 from symproof.library.physics import constant_acceleration, rotational_kinematic
 
 t = sympy.Symbol("t")
 
 # ─── Linear kinematics: ball thrown upward ──────────────────────
-v0 = sympy.Symbol("v_0", positive=True)
-g = sympy.Symbol("g", positive=True)
+v0 = sympy.Symbol("v_0", positive=True)  # positive = upward
+g = sympy.Symbol("g", positive=True)     # positive = magnitude (not direction!)
 
-# The framework requires axioms for any symbol assumption that affects
-# the proof.  Even "obvious" physics facts like g > 0 must be stated.
-# This is deliberate — it forces explicit accounting of all assumptions.
-axioms = AxiomSet(
-    name="projectile",
-    axioms=(
-        Axiom(name="v0_positive", expr=sympy.Symbol("v_0") > 0,
-              description="Initial upward velocity is positive"),
-        Axiom(name="g_positive", expr=sympy.Symbol("g") > 0,
-              description="Gravitational acceleration is positive"),
-    ),
-)
+# from_symbols() auto-generates axioms from symbol assumptions.
+# v0 > 0 and g > 0 become formal axioms — even "obvious" physics
+# facts must be stated explicitly, because the sign of g is a real
+# source of errors (g is a positive magnitude; -g is the acceleration).
+axioms = AxiomSet.from_symbols("projectile", v0, g, t)
 
 bundle = constant_acceleration(axioms, x0=0, v0=v0, a=-g, t=t)
 
@@ -61,12 +54,9 @@ for lr in bundle.proof_result.lemma_results:
 omega0 = sympy.Symbol("omega_0")
 alpha = sympy.Symbol("alpha")
 
-rot_axioms = AxiomSet(
-    name="spinning_wheel",
-    axioms=(
-        Axiom(name="defined", expr=sympy.Eq(1, 1)),
-    ),
-)
+# No domain constraints needed — pure algebra.
+# Empty axiom set works when the proof is just differentiation.
+rot_axioms = AxiomSet(name="spinning_wheel", axioms=())
 
 rot_bundle = rotational_kinematic(rot_axioms, theta0=0, omega0=omega0, alpha=alpha, t=t)
 

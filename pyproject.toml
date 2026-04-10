@@ -27,6 +27,9 @@ path = "symproof/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Axiom .* has expr=True but its name suggests a constraint:UserWarning",
+]
 
 [tool.ruff]
 line-length = 88

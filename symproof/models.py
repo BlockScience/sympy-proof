@@ -125,6 +125,38 @@ class AxiomSet(BaseModel):
                     continue  # cannot determine — let it pass
         return self
 
+    @model_validator(mode="after")
+    def _warn_collapsed_axioms(self) -> Self:
+        """Warn when axiom expressions appear to have been eagerly evaluated.
+
+        If an axiom's name suggests a constraint (contains 'pos', 'neg',
+        'nonneg', 'nonzero', 'bounded') but its expression is ``True``,
+        it was likely constructed with an assumed symbol without
+        ``unevaluated()``.  This is not an error but loses structural
+        information — use ``AxiomSet.from_symbols()`` or wrap in
+        ``unevaluated()`` instead.
+        """
+        import warnings
+
+        constraint_hints = ("pos", "neg", "nonneg", "nonzero", "bound")
+        for axiom in self.axioms:
+            if axiom.expr is not sympy.S.true:
+                continue
+            if axiom.inherited:
+                continue  # inherited True axioms are intentional (external results)
+            name_lower = axiom.name.lower()
+            if any(hint in name_lower for hint in constraint_hints):
+                warnings.warn(
+                    f"Axiom '{axiom.name}' has expr=True but its name "
+                    f"suggests a constraint. This usually means the expression "
+                    f"was eagerly evaluated by SymPy (e.g., "
+                    f"Symbol('x', positive=True) > 0 becomes True). "
+                    f"Use AxiomSet.from_symbols() or wrap construction in "
+                    f"unevaluated() to preserve the expression.",
+                    stacklevel=3,
+                )
+        return self
+
     def canonical_dict(self) -> dict:
         """Sorted, srepr'd canonical form for hashing."""
         return make_canonical_dict(
@@ -167,6 +199,69 @@ class AxiomSet(BaseModel):
             if a.name == name:
                 return a
         return None
+
+    @classmethod
+    def from_symbols(
+        cls,
+        name: str,
+        *symbols: sympy.Symbol,
+        extra_axioms: tuple[Axiom, ...] = (),
+    ) -> AxiomSet:
+        """Create an axiom set from symbol assumptions.
+
+        Inspects each symbol's constructor assumptions (``positive``,
+        ``nonnegative``, ``negative``, ``nonpositive``, ``nonzero``)
+        and generates a corresponding axiom.  Symbols without expressible
+        assumptions are silently skipped.
+
+        Uses ``unevaluated()`` internally so axiom expressions preserve
+        structure (e.g., ``x > 0`` stays as ``StrictGreaterThan``, not
+        ``True``).
+
+        Parameters
+        ----------
+        name:
+            Name for the axiom set.
+        *symbols:
+            SymPy symbols to extract assumptions from.
+        extra_axioms:
+            Additional axioms to include beyond symbol assumptions.
+
+        Examples
+        --------
+        >>> import sympy
+        >>> v0 = sympy.Symbol("v0", positive=True)
+        >>> g = sympy.Symbol("g", positive=True)
+        >>> t = sympy.Symbol("t")
+        >>> axioms = AxiomSet.from_symbols("kinematics", v0, g, t)
+        >>> len(axioms.axioms)  # t has no expressible assumptions
+        2
+        """
+        from symproof.evaluation import unevaluated
+
+        assumption_map: dict[str, tuple[str, sympy.Basic]] = {
+            "positive": ("positive", lambda s: s > 0),
+            "nonnegative": ("nonneg", lambda s: s >= 0),
+            "negative": ("negative", lambda s: s < 0),
+            "nonpositive": ("nonpositive", lambda s: s <= 0),
+            "nonzero": ("nonzero", lambda s: sympy.Ne(s, 0)),
+        }
+
+        generated: list[Axiom] = []
+        with unevaluated():
+            for sym in symbols:
+                orig = getattr(sym, "_assumptions_orig", {})
+                for assumption, (suffix, expr_fn) in assumption_map.items():
+                    if orig.get(assumption):
+                        generated.append(
+                            Axiom(
+                                name=f"{sym.name}_{suffix}",
+                                expr=expr_fn(sym),
+                                description=f"{sym.name} is {assumption}",
+                            )
+                        )
+
+        return cls(name=name, axioms=tuple(generated) + extra_axioms)
 
     @property
     def axiom_set_hash(self) -> str:

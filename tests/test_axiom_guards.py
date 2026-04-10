@@ -304,6 +304,107 @@ class TestLoadBearing:
         assert bundle.proof_result.status == ProofStatus.VERIFIED
 
 
+class TestFromSymbols:
+    def test_generates_positive_axiom(self):
+        x = sympy.Symbol("x", positive=True)
+        ax = AxiomSet.from_symbols("test", x)
+        assert len(ax.axioms) == 1
+        assert ax.axioms[0].name == "x_positive"
+        assert ax.axioms[0].expr is not sympy.S.true  # structural
+
+    def test_generates_nonnegative_axiom(self):
+        x = sympy.Symbol("x", nonnegative=True)
+        ax = AxiomSet.from_symbols("test", x)
+        assert len(ax.axioms) == 1
+        assert "nonneg" in ax.axioms[0].name
+
+    def test_skips_bare_symbols(self):
+        x = sympy.Symbol("x")
+        ax = AxiomSet.from_symbols("test", x)
+        assert len(ax.axioms) == 0
+
+    def test_multiple_symbols(self):
+        x = sympy.Symbol("x", positive=True)
+        y = sympy.Symbol("y", nonnegative=True)
+        z = sympy.Symbol("z")
+        ax = AxiomSet.from_symbols("test", x, y, z)
+        assert len(ax.axioms) == 2  # z skipped
+
+    def test_extra_axioms_appended(self):
+        x = sympy.Symbol("x", positive=True)
+        extra = Axiom(name="custom", expr=sympy.Eq(1, 1))
+        ax = AxiomSet.from_symbols("test", x, extra_axioms=(extra,))
+        assert len(ax.axioms) == 2
+        assert ax.axioms[-1].name == "custom"
+
+    def test_passes_load_bearing_check(self):
+        """Axioms from from_symbols cover the symbol's assumptions at seal time."""
+        x = sympy.Symbol("x", positive=True)
+        ax = AxiomSet.from_symbols("test", x)
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("l", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+
+class TestEmptyAxiomSet:
+    def test_empty_axiom_set_works(self):
+        ax = AxiomSet(name="empty", axioms=())
+        h = ax.hypothesis("h", expr=sympy.Eq((sympy.Symbol("x") + 1)**2,
+                          sympy.Symbol("x")**2 + 2*sympy.Symbol("x") + 1))
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("expand", LemmaKind.EQUALITY,
+                   expr=(sympy.Symbol("x") + 1)**2,
+                   expected=sympy.Symbol("x")**2 + 2*sympy.Symbol("x") + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+
+class TestCollapsedAxiomWarning:
+    def test_warns_on_collapsed_constraint(self):
+        import warnings
+        x = sympy.Symbol("x", positive=True)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            AxiomSet(name="s", axioms=(
+                Axiom(name="x_positive", expr=x > 0),
+            ))
+        assert any("suggests a constraint" in str(warning.message) for warning in w)
+
+    def test_no_warning_from_symbols(self):
+        import warnings
+        x = sympy.Symbol("x", positive=True)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            AxiomSet.from_symbols("s", x)
+        constraint_warns = [
+            warning for warning in w
+            if "suggests a constraint" in str(warning.message)
+        ]
+        assert len(constraint_warns) == 0
+
+    def test_no_warning_for_inherited_true(self):
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            AxiomSet(name="s", axioms=(
+                Axiom(name="theorem_positive", expr=sympy.S.true,
+                      inherited=True, citation=Citation(source="test")),
+            ))
+        constraint_warns = [
+            warning for warning in w
+            if "suggests a constraint" in str(warning.message)
+        ]
+        assert len(constraint_warns) == 0
+
+
 class TestNoisyAssumptions:
     def test_seal_reports_assumptions(self):
         """seal() result includes [ASSUMPTIONS] advisories."""
