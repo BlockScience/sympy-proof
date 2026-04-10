@@ -13,4 +13,7 @@ Examples
     Prove XOR equals its decomposition into AND/OR/NOT.
 03_zk_witness
     R1CS witness satisfaction for a simple ZK circuit; output entropy.
+04_information_leakage
+    Cross-domain composition: circuit correctness + Shannon entropy
+    proves whether a gate leaks information about its inputs.
 """
