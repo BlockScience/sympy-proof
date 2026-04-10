@@ -276,7 +276,7 @@ def circuit_satisfies(
             axiom_set,
             hyp.name,
             name="satisfaction_proof",
-            claim=f"Assignment satisfies the boolean formula.",
+            claim="Assignment satisfies the boolean formula.",
         )
         .lemma(
             "evaluates_true",

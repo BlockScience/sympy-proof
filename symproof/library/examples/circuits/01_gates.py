@@ -15,7 +15,6 @@ What this proves
 Run: uv run python -m symproof.library.examples.circuits.01_gates
 """
 
-import sympy
 from sympy import And, Xor, symbols
 
 from symproof import AxiomSet
@@ -43,6 +42,6 @@ and_bundle = circuit_output(
     {a: True, b: False},
     False,
 )
-print(f"\nAND(1, 0) = 0")
+print("\nAND(1, 0) = 0")
 print(f"  Status: {and_bundle.proof_result.status.value}")
 print(f"  Hash:   {and_bundle.bundle_hash[:24]}...")

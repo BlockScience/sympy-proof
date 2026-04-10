@@ -218,7 +218,7 @@ def strong_duality(
     hyp = axiom_set.hypothesis(
         "strong_duality",
         expr=sympy.Eq(gap, 0),
-        description=f"Strong duality: c^T x* = b^T y* (gap = 0)",
+        description="Strong duality: c^T x* = b^T y* (gap = 0)",
     )
 
     script = (
@@ -241,7 +241,7 @@ def strong_duality(
             expr=gap,
             expected=sympy.Integer(0),
             depends_on=["primal_value"],
-            description=f"c^T x* - b^T y* = 0",
+            description="c^T x* - b^T y* = 0",
         )
         .build()
     )
@@ -502,7 +502,6 @@ def lp_relaxation_bound(
         description=f"LP relaxation bound: {lp_value} <= {ilp_value}",
     )
 
-    asm = assumptions or {}
 
     script = (
         ProofBuilder(

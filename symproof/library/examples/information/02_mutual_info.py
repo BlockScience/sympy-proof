@@ -37,6 +37,6 @@ correlated = mutual_information(
     [[R(1, 2), 0],
      [0, R(1, 2)]],
 )
-print(f"\nPerfectly correlated: P(X=Y) = 1")
+print("\nPerfectly correlated: P(X=Y) = 1")
 print(f"  {correlated.hypothesis.description}")
 print(f"  Status: {correlated.proof_result.status.value}")

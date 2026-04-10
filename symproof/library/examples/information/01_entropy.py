@@ -29,12 +29,12 @@ print(f"  Status: {coin_bundle.proof_result.status.value}")
 
 # Biased source
 biased_bundle = entropy(axioms, [R(1, 4), R(1, 2), R(1, 4)])
-print(f"\nBiased source: P = [1/4, 1/2, 1/4]")
+print("\nBiased source: P = [1/4, 1/2, 1/4]")
 print(f"  {biased_bundle.hypothesis.description}")
 print(f"  Status: {biased_bundle.proof_result.status.value}")
 
 # Binary entropy function
 bef_bundle = binary_entropy_func(axioms, R(1, 4))
-print(f"\nBinary entropy H(1/4):")
+print("\nBinary entropy H(1/4):")
 print(f"  {bef_bundle.hypothesis.description}")
 print(f"  Status: {bef_bundle.proof_result.status.value}")

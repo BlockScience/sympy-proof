@@ -32,7 +32,7 @@ print(f"Domain [-2, 2] is compact: {compact_bundle.proof_result.status.value}")
 # Then apply EVT
 f = x**3 - 3 * x + 1
 evt_bundle = extreme_value(axioms, f, x, -2, 2)
-print(f"\nEVT: f(x) = x^3 - 3x + 1 on [-2, 2]")
+print("\nEVT: f(x) = x^3 - 3x + 1 on [-2, 2]")
 print(f"  Status: {evt_bundle.proof_result.status.value}")
 print(f"  Hash:   {evt_bundle.bundle_hash[:24]}...")
 print(f"  {evt_bundle.hypothesis.description}")

@@ -46,7 +46,19 @@ Before writing custom lemmas, check if a library function covers this directly:
 
 **Convex:** `convex_scalar`, `convex_hessian`, `strongly_convex`, `unique_minimizer`, `convex_composition`, `conjugate_function`
 
+**Physics:** `constant_acceleration`, `shm_solution_verify`, `shm_energy_conservation`, `work_energy_theorem`, `gravitational_potential_from_force`
+
+**Linear Opt:** `feasible_point`, `dual_feasible`, `strong_duality`, `lp_optimal`, `integer_feasible`
+
+**Topology:** `verify_open`, `verify_closed`, `verify_compact`, `continuous_at_point`, `intermediate_value`, `extreme_value`
+
+**Circuits:** `gate_truth_table`, `circuit_equivalence`, `r1cs_witness_check`, `boolean_entropy`
+
+**Information:** `entropy`, `mutual_information`, `kl_divergence`, `binary_symmetric_channel`
+
 **DeFi:** `fee_complement_positive`, `amm_output_positive`, `amm_product_nondecreasing`
+
+**Envelope:** `envelope_theorem`
 
 **Core:** `max_ge_first`, `piecewise_collapse`
 

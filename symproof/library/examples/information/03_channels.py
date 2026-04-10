@@ -32,7 +32,7 @@ kl_bundle = kl_divergence(
     [R(1, 4), R(1, 2), R(1, 4)],
     [R(1, 3), R(1, 3), R(1, 3)],
 )
-print(f"\nKL divergence: P=[1/4,1/2,1/4] vs Q=[1/3,1/3,1/3]")
+print("\nKL divergence: P=[1/4,1/2,1/4] vs Q=[1/3,1/3,1/3]")
 print(f"  {kl_bundle.hypothesis.description}")
 print(f"  Status: {kl_bundle.proof_result.status.value}")
 for lr in kl_bundle.proof_result.lemma_results:

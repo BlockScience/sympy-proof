@@ -23,6 +23,24 @@ Most formal methods tools are **verification** tools — they prove code matches
 
 **symproof is primarily a validation tool.** It works at the formula level, not the code level. "Does this control law actually stabilize the plant?" is a math question. "Does rounding error accumulate in the right direction across a pipeline?" is a math question. "Does this invariant hold under the claimed parameter range?" is a math question. These are questions about whether the *design* is correct — before any code is written.
 
+### Why you need all three layers
+
+Each layer of testing has blind spots the others cover. No single layer gives you a complete picture — together they give you a three-dimensional view of system correctness.
+
+**Symbolic analysis** (symproof) surfaces the assumptions your algorithms make about things the code cannot control — user behavior, input distributions, environmental conditions, parameter ranges. These assumptions live in the math, not in the code. A controller that's provably stable for J > 0 will fail if the moment of inertia estimate is wrong. An AMM invariant that holds for 0 < fee < 1 breaks if the fee parameter is set to zero. Code review won't catch this because the code correctly implements the formula. Integration tests might miss it because they test the happy path. Only symbolic analysis forces you to enumerate what you're assuming and check whether those assumptions actually hold.
+
+**Numerical simulation** catches what symbolic analysis can't: finite-precision effects, noise sensitivity, parameter uncertainty, edge cases at domain boundaries. Your formula might be symbolically correct but numerically unstable. Monte Carlo testing reveals the gap between the idealized model and the messy reality.
+
+**Implementation verification** catches what both miss: did the code actually implement the formula it claims to? Typos, off-by-one errors, wrong function calls, concurrency bugs — these have nothing to do with the math and everything to do with the translation from specification to code.
+
+| Layer | Blind spot | What it misses |
+|---|---|---|
+| **Symbolic** (symproof) | Assumes exact arithmetic, idealized conditions | Floating-point errors, noise, real-world parameter variation |
+| **Simulation** | Tests specific scenarios, not all of them | Edge cases outside the test distribution, systematic design flaws |
+| **Verification** | Proves code matches spec — but the spec might be wrong | Mathematical errors in the design, wrong assumptions about the environment |
+
+Each layer is necessary. None is sufficient. The expensive failures happen in the gaps between layers — a mathematically flawed design that passes code review, a numerically unstable formula that passes symbolic analysis, a correctly-implemented spec that nobody validated against reality.
+
 ### The three-layer architecture
 
 | Layer | Role | Proves | Tool |
@@ -31,7 +49,7 @@ Most formal methods tools are **verification** tools — they prove code matches
 | **Simulation** | Does it work in practice? | Properties hold under finite precision, noise, parameter variation | numpy, MATLAB, Monte Carlo, fuzzing |
 | **Verification** | Is the code right? | Production code matches the validated model | Static analysis, formal verification, code review |
 
-symproof covers the first layer. It proves that the *formula* has the properties you think it has — not that the *code* implements the formula correctly, and not that the formula behaves well under conditions you haven't modeled.
+symproof covers the first layer. It proves that the *formula* has the properties you think it has — not that the *code* implements the formula correctly, and not that the formula behaves well under conditions you haven't modeled. Crucially, it makes the assumptions explicit: every axiom in a proof bundle is a condition the design depends on. If those conditions don't hold in deployment, the proof is still valid — but the system will still fail.
 
 The innovation is **binding all three layers via cryptographically traceable evidence trees.** Each sealed proof bundle gets a deterministic SHA-256 hash. That hash goes into a requirements traceability matrix alongside simulation results and code audit findings. Any reviewer can re-run the proof and get the identical hash — independent, reproducible evidence.
 
@@ -39,12 +57,13 @@ The [satellite ADCS example](symproof/library/examples/control/04_composition.py
 
 ### What symproof proves (validation)
 
-- A Lyapunov function exists (the model is actually stable)
+- A Lyapunov function exists (the model is actually stable — under the stated assumptions)
 - The characteristic polynomial is Hurwitz (all roots in the left half-plane)
 - Rounding error is bounded AND accumulates in the correct direction
 - Intermediate products don't overflow machine word sizes
-- Coordinate transforms are invertible and preserve properties
-- Signed quantities (costs, errors, forces) net in the required direction
+- A boolean circuit's output entropy quantifies information leakage
+- An LP solution satisfies optimality conditions (KKT / duality)
+- A continuous function on a compact set attains its maximum (EVT)
 - An economic invariant holds under the claimed fee structure
 
 ### What symproof does NOT prove
@@ -53,8 +72,9 @@ The [satellite ADCS example](symproof/library/examples/control/04_composition.py
 - The formula behaves under parameter uncertainty → **simulation** (Monte Carlo, fuzzing)
 - The system is robust to unmodeled dynamics → **testing** (hardware-in-the-loop, integration tests)
 - Runtime inputs stay within the proven bounds → **monitoring** (runtime checks, assertions)
+- The axioms actually hold in deployment → **domain expertise** (the proof is only as good as its assumptions)
 
-These gaps are covered by the other two layers. symproof's proofs are **necessary but not sufficient** — they establish that the design is mathematically sound before simulation tests it under stress and code analysis verifies the implementation.
+These gaps are covered by the other layers. symproof's proofs are **necessary but not sufficient** — they establish that the design is mathematically sound and its assumptions are explicit, before simulation tests it under stress and code analysis verifies the implementation.
 
 ### Hidden axioms: the silent failure mode
 
@@ -211,6 +231,66 @@ Tools for the numerical analysis issues Solidity auditors actually face.
 
 Run the walkthrough: `uv run python -m symproof.library.examples.defi.01_amm_swap_audit`
 
+### Convex Optimization (`symproof.library.convex`)
+
+| Function | Proves |
+|----------|--------|
+| `convex_scalar(ax, f, x)` | f''(x) >= 0 (scalar convexity) |
+| `convex_hessian(ax, f, vars)` | Hessian PSD via Sylvester's criterion |
+| `strongly_convex(ax, f, vars, m)` | Hessian eigenvalues >= m > 0 |
+| `unique_minimizer(ax, f, vars, m)` | Strong convexity implies unique minimum |
+| `conjugate_function(ax, f, x, y)` | Fenchel conjugate f* and its convexity |
+| `convex_composition(ax, f, g_list)` | DCP composition rules |
+
+### Physics (`symproof.library.physics`)
+
+| Function | Proves |
+|----------|--------|
+| `constant_acceleration(ax, x0, v0, a, t)` | v = dx/dt, a = dv/dt from x(t) |
+| `shm_solution_verify(ax, A, omega, phi, t)` | x(t) satisfies x'' + omega^2 x = 0 |
+| `shm_energy_conservation(ax, m, k, A, omega, phi, t)` | dE/dt = 0 for SHM |
+| `work_energy_theorem(ax, F, m, v0, a, t)` | W = delta(KE) |
+| `gravitational_potential_from_force(ax, G, M, m, r)` | F = -dU/dr |
+
+### Linear Optimization (`symproof.library.linopt`)
+
+| Function | Proves |
+|----------|--------|
+| `feasible_point(ax, A, b, x)` | Ax = b, x >= 0 |
+| `dual_feasible(ax, A, c, y, z)` | A^T y + z = c, z >= 0 |
+| `strong_duality(ax, c, b, x, y)` | c^T x = b^T y |
+| `lp_optimal(ax, c, A, b, x, y, z)` | Composed: primal + dual + duality => optimal |
+| `integer_feasible(ax, A, b, x)` | Ax = b, x >= 0, x integer |
+
+### Point-Set Topology (`symproof.library.topology`)
+
+| Function | Proves |
+|----------|--------|
+| `verify_open(ax, S)` | Set is open |
+| `verify_closed(ax, S)` | Set is closed (complement open) |
+| `verify_compact(ax, S)` | Heine-Borel: closed + bounded => compact |
+| `continuous_at_point(ax, f, x, a)` | lim f(x) = f(a) as x -> a |
+| `intermediate_value(ax, f, x, a, b, target)` | IVT: sign change implies root |
+| `extreme_value(ax, f, x, a, b)` | EVT: max and min on closed interval |
+
+### Boolean Circuits (`symproof.library.circuits`)
+
+| Function | Proves |
+|----------|--------|
+| `gate_truth_table(ax, expr, vars, expected)` | Gate matches truth table |
+| `circuit_equivalence(ax, A, B, vars)` | Two circuits compute same function |
+| `r1cs_witness_check(ax, A, B, C, witness)` | Witness satisfies R1CS constraints (ZK) |
+| `boolean_entropy(ax, expr, vars)` | Output entropy of boolean function |
+
+### Shannon Information Theory (`symproof.library.information`)
+
+| Function | Proves |
+|----------|--------|
+| `entropy(ax, probs)` | H(X) = -sum p_i log2(p_i) |
+| `mutual_information(ax, joint_probs)` | I(X;Y) = H(X) + H(Y) - H(X,Y) |
+| `kl_divergence(ax, p, q)` | D(P\|\|Q) with Gibbs' inequality |
+| `binary_symmetric_channel(ax, p)` | BSC capacity C = 1 - H(p) |
+
 ## Verification Strategies
 
 symproof dispatches on `LemmaKind`:
@@ -218,8 +298,10 @@ symproof dispatches on `LemmaKind`:
 | Kind | How it verifies | Use when |
 |------|----------------|----------|
 | `EQUALITY` | `simplify(expr - expected) == 0` | Algebraic identities, series |
-| `BOOLEAN` | `simplify(expr) is True`, with `refine()` and proof-by-contradiction fallbacks | Implications, inequalities |
-| `QUERY` | `sympy.ask(expr, context)` | Positivity, type queries (irrational, integer, etc.) |
+| `BOOLEAN` | `simplify(expr) is True`, with `refine()` fallbacks | Implications, inequalities |
+| `QUERY` | `sympy.ask(expr, context)` | Positivity, type queries |
+| `PROPERTY` | `getattr(expr, property_name)` is truthy | Topological/structural properties |
+| `INFERENCE` | Non-empty `depends_on` + non-empty `rule` | Logical conclusions from premises |
 | `COORDINATE_TRANSFORM` | Round-trip + transform + simplify | Polar/hyperbolic coordinate proofs |
 
 ## Development

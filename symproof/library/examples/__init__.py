@@ -25,6 +25,22 @@ physics/
     High school physics with calculus: kinematics, energy,
     simple harmonic motion, gravitation.
 
+linopt/
+    Linear/integer optimization: LP feasibility, duality,
+    optimality certificates, ILP integrality.
+
+topology/
+    Point-set topology: open/closed sets, compactness,
+    continuity, intermediate and extreme value theorems.
+
+circuits/
+    Boolean circuits with ZK applications: gate verification,
+    circuit equivalence, R1CS witness, information leakage.
+
+information/
+    Shannon information theory: entropy, mutual information,
+    KL divergence, channel capacity.
+
 dip_routing/
     Reproves main results of Zargham, Ribeiro & Jadbabaie (2014)
     "Discounted Integral Priority Routing For Data Networks."

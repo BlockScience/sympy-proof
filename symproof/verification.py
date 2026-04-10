@@ -1,10 +1,13 @@
 """Proof verification engine.
 
-Three-way dispatch on ``LemmaKind``:
+Six-way dispatch on ``LemmaKind``:
 
 - ``EQUALITY``  — ``simplify(expr - expected) == 0`` with ``.doit()`` fallback
 - ``BOOLEAN``   — ``simplify(expr) is sympy.true``
 - ``QUERY``     — ``sympy.ask(expr, context)`` returns ``True``
+- ``PROPERTY``  — ``getattr(expr, property_name)`` is truthy
+- ``INFERENCE`` — ``depends_on`` non-empty and ``rule`` non-empty (structural)
+- ``COORDINATE_TRANSFORM`` — round-trip + transform + simplify
 
 ``verify_proof`` checks mathematical validity only (do the lemmas hold?).
 Context binding (does ``axiom_set_hash`` match the actual axiom set?) is

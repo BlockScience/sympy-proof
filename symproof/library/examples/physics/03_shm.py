@@ -39,8 +39,8 @@ axioms = AxiomSet(
 # 1. Verify solution satisfies the ODE
 ode_bundle = shm_solution_verify(axioms, A=A, omega=omega, phi=phi, t=t)
 print("SHM solution verification")
-print(f"  x(t) = A*cos(omega*t + phi)")
-print(f"  x'' + omega^2*x = 0")
+print("  x(t) = A*cos(omega*t + phi)")
+print("  x'' + omega^2*x = 0")
 print(f"  Status: {ode_bundle.proof_result.status.value}")
 print(f"  Hash:   {ode_bundle.bundle_hash[:24]}...")
 for lr in ode_bundle.proof_result.lemma_results:
@@ -52,7 +52,7 @@ energy_bundle = shm_energy_conservation(
     axioms, m=m, k=k, A=A, omega=omega, phi=phi, t=t,
 )
 print("\nSHM energy conservation")
-print(f"  E = (1/2)*m*v^2 + (1/2)*k*x^2")
-print(f"  dE/dt = 0 (using omega^2 = k/m)")
+print("  E = (1/2)*m*v^2 + (1/2)*k*x^2")
+print("  dE/dt = 0 (using omega^2 = k/m)")
 print(f"  Status: {energy_bundle.proof_result.status.value}")
 print(f"  Hash:   {energy_bundle.bundle_hash[:24]}...")

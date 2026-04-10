@@ -204,12 +204,12 @@ def mutual_information(
         Hx = sympy.simplify(_H(px))
         Hy = sympy.simplify(_H(py))
         Hxy = sympy.simplify(_H(flat))
-        I = sympy.simplify(Hx + Hy - Hxy)
+        MI = sympy.simplify(Hx + Hy - Hxy)
 
     hyp = axiom_set.hypothesis(
         "mutual_information_computed",
         expr=sympy.S.true,
-        description=f"I(X;Y) = {I} bits (H(X)={Hx}, H(Y)={Hy}, H(X,Y)={Hxy})",
+        description=f"I(X;Y) = {MI} bits (H(X)={Hx}, H(Y)={Hy}, H(X,Y)={Hxy})",
     )
 
     script = (
@@ -243,10 +243,10 @@ def mutual_information(
         .lemma(
             "mutual_info_value",
             LemmaKind.EQUALITY,
-            expr=I,
-            expected=I,
+            expr=MI,
+            expected=MI,
             depends_on=["marginal_x_entropy", "marginal_y_entropy", "joint_entropy"],
-            description=f"I(X;Y) = H(X) + H(Y) - H(X,Y) = {I} bits",
+            description=f"I(X;Y) = H(X) + H(Y) - H(X,Y) = {MI} bits",
         )
         .build()
     )

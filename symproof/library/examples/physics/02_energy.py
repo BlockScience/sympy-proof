@@ -36,13 +36,13 @@ axioms = AxiomSet(
 # Work-energy theorem
 we_bundle = work_energy_theorem(axioms, F=F, m=m, v0=0, a=a, t=t)
 print("Work-energy theorem (block pushed from rest)")
-print(f"  W = F*x = (1/2)*m*v^2 = delta(KE)")
+print("  W = F*x = (1/2)*m*v^2 = delta(KE)")
 print(f"  Status: {we_bundle.proof_result.status.value}")
 print(f"  Hash:   {we_bundle.bundle_hash[:24]}...")
 
 # Impulse-momentum theorem
 im_bundle = impulse_momentum(axioms, F=F, m=m, v0=0, a=a, t=t)
 print("\nImpulse-momentum theorem")
-print(f"  J = F*t = m*v = delta(p)")
+print("  J = F*t = m*v = delta(p)")
 print(f"  Status: {im_bundle.proof_result.status.value}")
 print(f"  Hash:   {im_bundle.bundle_hash[:24]}...")

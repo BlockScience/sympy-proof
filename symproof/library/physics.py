@@ -60,7 +60,6 @@ def constant_acceleration(
     assumptions:
         Symbol assumptions for verification.
     """
-    asm = assumptions or {}
 
     x_t = x0 + v0 * t + sympy.Rational(1, 2) * a * t**2
     with evaluation():

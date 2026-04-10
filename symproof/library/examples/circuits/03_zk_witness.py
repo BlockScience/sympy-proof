@@ -37,8 +37,8 @@ witness = sympy.Matrix([1, 3, 7, 21])
 
 r1cs_bundle = r1cs_witness_check(axioms, A, B, C, witness)
 print("R1CS witness check: a * b = c")
-print(f"  Witness: [1, a=3, b=7, c=21]")
-print(f"  Constraint: 3 * 7 = 21")
+print("  Witness: [1, a=3, b=7, c=21]")
+print("  Constraint: 3 * 7 = 21")
 print(f"  Status: {r1cs_bundle.proof_result.status.value}")
 print(f"  Hash:   {r1cs_bundle.bundle_hash[:24]}...")
 

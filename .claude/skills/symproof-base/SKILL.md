@@ -52,6 +52,8 @@ AxiomSet → axiom_set_hash
 | EQUALITY | `simplify(expr - expected) == 0`, .doit() fallback | Algebraic identities, series, closed forms |
 | BOOLEAN | `simplify → refine → proof-by-contradiction` | Implications, inequalities, relational |
 | QUERY | `sympy.ask(expr, Q-context)` | Positivity, type predicates (irrational, integer) |
+| PROPERTY | `getattr(expr, property_name)` is truthy | Topological/structural properties (is_open, is_closed) |
+| INFERENCE | `depends_on` non-empty + `rule` non-empty | Logical conclusions from premises (Heine-Borel, duality) |
 | COORDINATE_TRANSFORM | Round-trip + transform + simplify/trigsimp | Polar, hyperbolic, body-frame transforms |
 
 ## Advisory system
@@ -95,6 +97,34 @@ unique = unique_minimizer(axioms, f, vars, m)  # internally imports strongly_con
 - `convex_sum / convex_composition` — DCP composition rules
 - `unique_minimizer` — strictly convex → unique (imports strongly_convex)
 - `gp_to_convex` — geometric program log-transform
+
+### physics — high school physics with calculus
+- `constant_acceleration / rotational_kinematic` — kinematic equations via differentiation
+- `shm_solution_verify / shm_energy_conservation` — SHM ODE and energy conservation
+- `work_energy_theorem / impulse_momentum` — work-energy, impulse-momentum
+- `gravitational_potential_from_force` — U(r) from F(r)
+
+### linopt — linear/integer optimization
+- `feasible_point / dual_feasible` — LP primal and dual feasibility
+- `strong_duality / complementary_slackness` — duality conditions
+- `lp_optimal` — composed: primal + dual + duality => optimal
+- `integer_feasible / lp_relaxation_bound` — ILP feasibility and relaxation bounds
+
+### topology — point-set topology in R
+- `verify_open / verify_closed / verify_compact` — set properties (uses PROPERTY kind)
+- `verify_boundary / continuous_at_point` — boundary and continuity
+- `intermediate_value / extreme_value` — IVT and EVT
+
+### circuits — boolean circuits and ZK
+- `gate_truth_table / circuit_equivalence` — gate verification
+- `circuit_output / circuit_satisfies` — circuit evaluation
+- `r1cs_witness_check` — ZK-SNARK witness satisfaction
+- `boolean_entropy` — output entropy (information leakage)
+
+### information — Shannon information theory
+- `entropy / joint_entropy / mutual_information` — entropy measures
+- `kl_divergence` — KL divergence with Gibbs' inequality
+- `binary_entropy_func / binary_symmetric_channel` — channel theory
 
 ### defi — DeFi mechanism analysis
 - `fee_complement_positive` — 1-f > 0 from bounded interval

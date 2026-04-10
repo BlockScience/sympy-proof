@@ -14,7 +14,6 @@ Xor(a, b) == Or(And(a, Not(b)), And(Not(a), b)) for all inputs.
 Run: uv run python -m symproof.library.examples.circuits.02_equivalence
 """
 
-import sympy
 from sympy import And, Not, Or, Xor, symbols
 
 from symproof import AxiomSet
@@ -30,7 +29,7 @@ xor_decomposed = Or(And(a, Not(b)), And(Not(a), b))
 bundle = circuit_equivalence(axioms, xor_native, xor_decomposed, [a, b])
 
 print("Circuit equivalence: XOR decomposition")
-print(f"  A: Xor(a, b)")
-print(f"  B: Or(And(a, Not(b)), And(Not(a), b))")
+print("  A: Xor(a, b)")
+print("  B: Or(And(a, Not(b)), And(Not(a), b))")
 print(f"  Equivalent: {bundle.proof_result.status.value}")
 print(f"  Hash: {bundle.bundle_hash[:24]}...")

@@ -29,10 +29,11 @@ Ten modules in a flat package:
 | `serialization.py` | `canonical_srepr`, `restore_expr`, `make_canonical_dict` |
 | `hashing.py` | `hash_axiom_set`, `hash_proof`, `hash_bundle` — SHA-256 identity |
 | `evaluation.py` | `unevaluated`, `evaluation` — explicit SymPy evaluation control |
-| `verification.py` | `verify_lemma`, `verify_proof` — three-strategy dispatch (gated by `evaluation()`) |
+| `verification.py` | `verify_lemma`, `verify_proof` — six-strategy dispatch (gated by `evaluation()`) |
 | `tactics.py` | `try_simplify`, `try_implication`, `try_query`, `auto_lemma` — automatic helpers |
 | `builder.py` | `ProofBuilder` — chainable construction API |
 | `bundle.py` | `seal`, `disprove`, `check_consistency` — bundle operations + foundation/consistency/load-bearing checks |
+| `composite.py` | `CompositeType`, `FixedPointType`, `ReservePairType` — domain-specific data types |
 
 ### Evidence Chain
 

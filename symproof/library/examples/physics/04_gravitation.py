@@ -44,8 +44,8 @@ with unevaluated():
 bundle = gravitational_potential_from_force(axioms, G=G, M=M, m=m, r=r)
 
 print("Gravitational potential from force law")
-print(f"  F(r) = -GMm/r^2")
-print(f"  U(r) = -GMm/r")
-print(f"  F = -dU/dr (verified)")
+print("  F(r) = -GMm/r^2")
+print("  U(r) = -GMm/r")
+print("  F = -dU/dr (verified)")
 print(f"  Status: {bundle.proof_result.status.value}")
 print(f"  Hash:   {bundle.bundle_hash[:24]}...")

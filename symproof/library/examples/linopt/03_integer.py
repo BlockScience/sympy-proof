@@ -46,8 +46,8 @@ bound_bundle = lp_relaxation_bound(
     lp_value=sympy.Rational(15, 2),  # 7.5
     ilp_value=sympy.Integer(8),
 )
-print(f"  LP relaxation value: 7.5")
-print(f"  ILP optimal value:   8")
-print(f"  Gap: 8 - 7.5 = 0.5 >= 0")
+print("  LP relaxation value: 7.5")
+print("  ILP optimal value:   8")
+print("  Gap: 8 - 7.5 = 0.5 >= 0")
 print(f"  Status: {bound_bundle.proof_result.status.value}")
 print(f"  Hash:   {bound_bundle.bundle_hash[:24]}...")
