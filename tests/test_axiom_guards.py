@@ -237,6 +237,73 @@ class TestLoadBearing:
         assert bundle.proof_result.status == ProofStatus.VERIFIED
 
 
+    def test_nonnegative_assumption_covered_by_ge_axiom(self):
+        """Symbol(nonneg=True) covered by axiom x >= 0."""
+        x = sympy.Symbol("x", nonnegative=True)
+        ax = AxiomSet(
+            name="s",
+            axioms=(Axiom(name="x_nn", expr=sympy.Symbol("x") >= 0),),
+        )
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_x", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_unevaluated_axiom_covers_assumption(self):
+        """Axiom built under unevaluated() covers the symbol assumption."""
+        from symproof import unevaluated
+
+        x = sympy.Symbol("x", positive=True)
+        with unevaluated():
+            ax = AxiomSet(
+                name="s",
+                axioms=(Axiom(name="x_pos", expr=x > 0),),
+            )
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_x", LemmaKind.EQUALITY, expr=x + 1, expected=x + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_multiple_uncovered_symbols_all_reported(self):
+        """Multiple symbols with uncovered assumptions are all listed."""
+        x = sympy.Symbol("x", positive=True)
+        y = sympy.Symbol("y", positive=True)
+        ax = AxiomSet(name="s", axioms=(Axiom(name="d", expr=sympy.S.true),))
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_both", LemmaKind.EQUALITY, expr=x + y, expected=x + y)
+            .build()
+        )
+        with pytest.raises(ValueError, match="load-bearing") as exc_info:
+            seal(ax, h, script)
+        # Both symbols should be named in the error
+        msg = str(exc_info.value)
+        assert "x" in msg
+        assert "y" in msg
+
+    def test_symbol_with_only_integer_assumption_passes(self):
+        """integer=True is not expressible as an axiom relational — allowed through."""
+        n = sympy.Symbol("n", integer=True)
+        ax = AxiomSet(name="s", axioms=(Axiom(name="d", expr=sympy.S.true),))
+        h = ax.hypothesis("h", expr=sympy.S.true)
+        script = (
+            ProofBuilder(ax, h.name, name="p", claim="c")
+            .lemma("uses_n", LemmaKind.EQUALITY, expr=n + 1, expected=n + 1)
+            .build()
+        )
+        bundle = seal(ax, h, script)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+
 class TestNoisyAssumptions:
     def test_seal_reports_assumptions(self):
         """seal() result includes [ASSUMPTIONS] advisories."""
