@@ -43,6 +43,15 @@ from symproof.library.convex import (
     unique_minimizer,
 )
 from symproof.library.core import max_ge_first, piecewise_collapse
+from symproof.library.physics import (
+    constant_acceleration,
+    gravitational_potential_from_force,
+    impulse_momentum,
+    rotational_kinematic,
+    shm_energy_conservation,
+    shm_solution_verify,
+    work_energy_theorem,
+)
 from symproof.library.envelope import envelope_theorem
 from symproof.library.defi import (
     DecimalAwarePool,
@@ -84,8 +93,10 @@ __all__ = [
     "div_up",
     "fee_complement_positive",
     "gain_margin",
+    "gravitational_potential_from_force",
     "gp_to_convex",
     "hurwitz_second_order",
+    "impulse_momentum",
     "hurwitz_third_order",
     "lyapunov_from_system",
     "lyapunov_stability",
@@ -97,9 +108,14 @@ __all__ = [
     "phantom_overflow_check",
     "piecewise_collapse",
     "quadratic_invariant",
+    "constant_acceleration",
+    "rotational_kinematic",
     "rounding_bias_lemma",
     "rounding_gap_lemma",
     "safe_mul_div",
+    "shm_energy_conservation",
+    "shm_solution_verify",
     "strongly_convex",
     "unique_minimizer",
+    "work_energy_theorem",
 ]

@@ -21,6 +21,10 @@ defi/
     AMM swap audit: rounding direction, phantom overflow,
     directional error chains, decimal mismatch, composed safety.
 
+physics/
+    High school physics with calculus: kinematics, energy,
+    simple harmonic motion, gravitation.
+
 dip_routing/
     Reproves main results of Zargham, Ribeiro & Jadbabaie (2014)
     "Discounted Integral Priority Routing For Data Networks."
