@@ -79,9 +79,10 @@ def verify_open(
         )
         .lemma(
             "is_open",
-            LemmaKind.BOOLEAN,
-            expr=sympy.S.true,
-            description=f"SymPy confirms {S}.is_open = True",
+            LemmaKind.PROPERTY,
+            expr=S,
+            property_name="is_open",
+            description=f"{S} is open",
         )
         .build()
     )
@@ -135,8 +136,9 @@ def verify_closed(
         )
         .lemma(
             "complement_is_open",
-            LemmaKind.BOOLEAN,
-            expr=sympy.S.true,
+            LemmaKind.PROPERTY,
+            expr=complement,
+            property_name="is_open",
             description=f"R \\ {S} is open, therefore {S} is closed",
         )
         .build()
@@ -200,14 +202,18 @@ def verify_compact(
         )
         .lemma(
             "is_closed",
-            LemmaKind.BOOLEAN,
-            expr=sympy.S.true,
+            LemmaKind.PROPERTY,
+            expr=S,
+            property_name="is_closed",
             description=f"{S} is closed",
         )
         .lemma(
             "is_bounded",
             LemmaKind.BOOLEAN,
-            expr=sympy.S.true,
+            expr=sympy.And(
+                sympy.Lt(inf_val, sympy.oo),
+                sympy.Gt(sup_val, sympy.S.NegativeInfinity),
+            ),
             depends_on=["is_closed"],
             description=f"{S} is bounded: inf={inf_val}, sup={sup_val}",
         )

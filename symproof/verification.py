@@ -366,6 +366,41 @@ def _verify_lemma_impl(lemma: Lemma) -> LemmaResult:
                 advisories=tuple(advisories),
             )
 
+        if lemma.kind == LemmaKind.PROPERTY:
+            prop_name = lemma.property_name
+            if not prop_name:
+                return LemmaResult(
+                    lemma_name=lemma.name,
+                    passed=False,
+                    error="PROPERTY lemma requires property_name to be set.",
+                    advisories=tuple(advisories),
+                )
+
+            subject = lemma.expr
+            try:
+                prop_value = getattr(subject, prop_name, None)
+                if prop_value is None:
+                    passed = False
+                    advisories.append(
+                        f"Object {type(subject).__name__} has no attribute "
+                        f"'{prop_name}'."
+                    )
+                else:
+                    passed = bool(prop_value)
+            except (TypeError, AttributeError, RecursionError) as exc:
+                passed = False
+                advisories.append(
+                    f"Error evaluating {type(subject).__name__}.{prop_name}: "
+                    f"{exc}"
+                )
+
+            return LemmaResult(
+                lemma_name=lemma.name,
+                passed=passed,
+                actual_value=sympy.true if passed else sympy.false,
+                advisories=tuple(advisories),
+            )
+
         if lemma.kind == LemmaKind.COORDINATE_TRANSFORM:
             if lemma.transform is None or lemma.inverse_transform is None:
                 return LemmaResult(

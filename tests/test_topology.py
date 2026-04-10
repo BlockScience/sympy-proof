@@ -106,6 +106,68 @@ class TestIntermediateValue:
             intermediate_value(_EMPTY, x**2 + 1, x, 0, 1, 0)
 
 
+class TestPropertyLemmaKind:
+    """Test the new PROPERTY verification strategy."""
+
+    def test_property_lemma_directly(self):
+        """Verify a PROPERTY lemma works at the verification level."""
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="test_open",
+            kind=LemmaKind.PROPERTY,
+            expr=sympy.Interval.open(0, 1),
+            property_name="is_open",
+        )
+        result = verify_lemma(lem)
+        assert result.passed
+
+    def test_property_false_fails(self):
+        """PROPERTY lemma fails when property is False."""
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="test_open",
+            kind=LemmaKind.PROPERTY,
+            expr=sympy.Interval(0, 1),  # closed, not open
+            property_name="is_open",
+        )
+        result = verify_lemma(lem)
+        assert not result.passed
+
+    def test_property_missing_name_fails(self):
+        """PROPERTY lemma without property_name fails."""
+        from symproof.models import Lemma, LemmaKind
+        from symproof.verification import verify_lemma
+
+        lem = Lemma(
+            name="test",
+            kind=LemmaKind.PROPERTY,
+            expr=sympy.Interval(0, 1),
+            property_name="",
+        )
+        result = verify_lemma(lem)
+        assert not result.passed
+
+
+class TestClopen:
+    """Clopen sets: both open and closed. R and EmptySet are clopen."""
+
+    def test_reals_are_open(self):
+        bundle = verify_open(_EMPTY, sympy.S.Reals)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_reals_are_closed(self):
+        bundle = verify_closed(_EMPTY, sympy.S.Reals)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+    def test_empty_set_is_open(self):
+        bundle = verify_open(_EMPTY, sympy.S.EmptySet)
+        assert bundle.proof_result.status == ProofStatus.VERIFIED
+
+
 class TestExtremeValue:
     def test_quadratic(self):
         bundle = extreme_value(_EMPTY, x**2, x, -1, 2)

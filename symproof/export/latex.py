@@ -135,6 +135,7 @@ _KIND_LABELS: dict[str, str] = {
     "equality": "equality",
     "boolean": "boolean",
     "query": "query",
+    "property": "property",
     "coordinate_transform": "coordinate transform",
 }
 
@@ -172,7 +173,14 @@ def latex_lemma(
     )
 
     # Main expression
-    lines.append(rf"  $\displaystyle {_expr_tex(lemma.expr)}$")
+    if lemma.property_name:
+        # PROPERTY: show "subject.property_name" for readability
+        lines.append(
+            rf"  $\displaystyle {_expr_tex(lemma.expr)}$"
+            rf" \texttt{{.{_escape(lemma.property_name)}}}"
+        )
+    else:
+        lines.append(rf"  $\displaystyle {_expr_tex(lemma.expr)}$")
 
     # Expected (for EQUALITY)
     if lemma.expected is not None:

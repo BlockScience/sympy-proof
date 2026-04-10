@@ -113,6 +113,7 @@ class ProofBuilder:
         description: str = "",
         transform: dict[str, sympy.Basic] | None = None,
         inverse_transform: dict[str, sympy.Basic] | None = None,
+        property_name: str = "",
     ) -> ProofBuilder:
         """Add a lemma to the proof chain and return self for chaining."""
         self._lemmas.append(
@@ -126,6 +127,7 @@ class ProofBuilder:
                 description=description,
                 transform=transform,
                 inverse_transform=inverse_transform,
+                property_name=property_name,
             )
         )
         return self

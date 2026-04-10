@@ -323,7 +323,7 @@ class Hypothesis(BaseModel):
 
 
 class LemmaKind(StrEnum):
-    """The four verification strategies SymPy handles reliably."""
+    """The five verification strategies SymPy handles reliably."""
 
     EQUALITY = "equality"
     """``simplify(expr - expected) == 0`` or ``expr.doit() == expected``."""
@@ -333,6 +333,18 @@ class LemmaKind(StrEnum):
 
     QUERY = "query"
     """``sympy.ask(expr, assumption_context)`` is ``True``."""
+
+    PROPERTY = "property"
+    """Verify a named property of a mathematical object.
+
+    ``expr`` is the subject (a SymPy Set, Matrix, expression, etc.).
+    ``property_name`` names the property to check (e.g., ``"is_open"``).
+    Verification evaluates ``getattr(expr, property_name)`` and checks
+    the result is truthy.
+
+    This makes proofs self-documenting: the subject and property are
+    structured data, not buried in a description string.
+    """
 
     COORDINATE_TRANSFORM = "coordinate_transform"
     """Transform → prove in new coordinates → verify round-trip.
@@ -371,6 +383,14 @@ class Lemma(BaseModel):
 
     Required for ``COORDINATE_TRANSFORM`` lemmas.  E.g. for polar→Cartesian:
     ``{"r": sqrt(x_1**2 + x_2**2), "theta": atan2(x_2, x_1)}``.
+    """
+
+    property_name: str = ""
+    """Name of the property to verify for ``PROPERTY`` lemmas.
+
+    E.g., ``"is_open"``, ``"is_closed"``, ``"is_subset"``.
+    Verification evaluates ``getattr(expr, property_name)`` and checks
+    the result is truthy.  Only used when ``kind == PROPERTY``.
     """
 
     depends_on: list[str] = []
@@ -486,6 +506,7 @@ class ProofScript(BaseModel):
                         else None
                     ),
                     "depends_on": lem.depends_on,
+                    "property_name": lem.property_name,
                     "description": lem.description,
                 }
                 for lem in self.lemmas
@@ -524,6 +545,7 @@ class ProofScript(BaseModel):
                         else None
                     ),
                     depends_on=ld.get("depends_on", []),
+                    property_name=ld.get("property_name", ""),
                     description=ld.get("description", ""),
                 )
             )
