@@ -43,6 +43,15 @@ from symproof.library.convex import (
     unique_minimizer,
 )
 from symproof.library.core import max_ge_first, piecewise_collapse
+from symproof.library.topology import (
+    continuous_at_point,
+    extreme_value,
+    intermediate_value,
+    verify_boundary,
+    verify_closed,
+    verify_compact,
+    verify_open,
+)
 from symproof.library.linopt import (
     complementary_slackness,
     dual_feasible,
@@ -132,6 +141,13 @@ __all__ = [
     "shm_solution_verify",
     "strong_duality",
     "strongly_convex",
+    "continuous_at_point",
+    "extreme_value",
+    "intermediate_value",
     "unique_minimizer",
+    "verify_boundary",
+    "verify_closed",
+    "verify_compact",
+    "verify_open",
     "work_energy_theorem",
 ]
